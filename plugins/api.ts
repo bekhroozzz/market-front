@@ -12,6 +12,7 @@ export default defineNuxtPlugin(() => {
       Accept: 'application/json',
     },
     async onRequest({ options, request }) {
+      const headers = new Headers(options.headers as HeadersInit)
       const access = useToken()
       const isRefreshTokenRequest = String(request).includes('/api/auth/refresh')
       const fuserToken = useCookie('fuserToken')
@@ -27,26 +28,19 @@ export default defineNuxtPlugin(() => {
             useSetTokens(data)
         }
 
-        options.headers = {
-          ...options.headers,
-          ...{ Authorization: `Bearer ${access.value}` },
-        }
+        headers.set('Authorization', `Bearer ${access.value}`)
       }
 
       if (fuserToken.value) {
-        options.headers = {
-          ...options.headers,
-          ...{ 'Fuser-Token': fuserToken.value },
-        }
+        headers.set('Fuser-Token', fuserToken.value)
       }
 
-      if (location) {
-        options.headers = {
-          ...options.headers,
-          ...{ 'User-Location-Id': String(location.id) },
-        }
+      const locationWithId = globalThis.location as (Location & { id?: string | number }) | undefined
+      if (locationWithId?.id !== undefined && locationWithId.id !== null) {
+        headers.set('User-Location-Id', String(locationWithId.id))
       }
 
+      options.headers = headers
 
     },
     async onResponseError({ response }) {

@@ -184,7 +184,7 @@ const products = computed(() => {
   })
 })
 
-const recommendedProducts = computed(() => products.value.slice(0, 12))
+// const recommendedProducts = computed(() => products.value.slice(0, 12))
 
 const foundCount = computed(() => {
   if (searchData.value)
@@ -210,12 +210,12 @@ function handleFiltersApply(payload: FiltersApplyPayload) {
 <template>
   <div class="my-10 flex flex-col">
     <BookingFilter class="mb-10 mx-auto px-4" @apply="handleFiltersApply"/>
-    <div class="px-4 lg:px-0 mx-auto w-full max-w-screen-2xl mb-4 text-sm opacity-80 flex items-center gap-3">
+    <div v-if="route?.query?.q?.length" class="px-4 lg:px-0 mx-auto w-full max-w-screen-2xl mb-4 text-sm opacity-80 flex items-center gap-3">
       <span>Найдено товаров: {{ foundCount }}</span>
       <span v-if="pending" class="loading loading-spinner loading-sm"/>
       <span v-if="isSearchFallback" class="text-warning">Поисковый сервис временно недоступен — применён локальный поиск.</span>
     </div>
-    <ProductFeedCards v-if="recommendedProducts.length" :products="recommendedProducts"/>
+    <!-- <ProductFeedCards v-if="recommendedProducts.length" :products="recommendedProducts"/> -->
     <div v-if="products.length" class="grid lg:px-0 px-4  grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mx-auto gap-4">
       <ProductCard
           v-for="(product, index) in products"
@@ -225,7 +225,7 @@ function handleFiltersApply(payload: FiltersApplyPayload) {
           :key="index"
       />
     </div>
-    <div v-else class="text-center py-12 text-base-content/70">
+    <div v-if="route?.query?.q?.length && !products?.length" class="text-center py-12 text-base-content/70">
       По вашему запросу ничего не найдено. Попробуйте изменить фильтры.
     </div>
   </div>
