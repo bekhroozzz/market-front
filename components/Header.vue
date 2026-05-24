@@ -6,10 +6,13 @@ import {breakpointsTailwind} from '@vueuse/core';
 
 const isOpen = ref<boolean>(false)
 const menuRef = ref(null)
+const route = useRoute()
+const router = useRouter()
 const isLogged = useLogged()
 const menuStore = useMenuStore()
 const { menuHeader } = storeToRefs(menuStore)
 const { lg } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
+const searchValue = ref('')
 
 const authModal = useModal({
   component: LazyModalTemplate,
@@ -53,6 +56,40 @@ function toggleMenu(opened: boolean) {
   else
     menuModal.close()
 }
+
+function normalizeQuerySearch(value: unknown): string {
+  if (Array.isArray(value))
+    return String(value[0] || '')
+  if (typeof value === 'string')
+    return value
+  return ''
+}
+
+watch(
+  () => route.query.q,
+  (value) => {
+    searchValue.value = normalizeQuerySearch(value)
+  },
+  { immediate: true },
+)
+
+async function submitSearch() {
+  const q = searchValue.value.trim()
+
+  const query = {
+    ...route.query,
+  } as Record<string, any>
+
+  if (q)
+    query.q = q
+  else
+    delete query.q
+
+  await router.push({
+    path: '/',
+    query,
+  })
+}
 </script>
 
 <template>
@@ -63,7 +100,17 @@ function toggleMenu(opened: boolean) {
         <span class="text-primary">Fun</span>
       </NuxtLink>
     </div>
-    <Input name="search" type="primary" :size="lg ? 'lg' : 'sm'" placeholder="Поиск" />
+    <input
+        v-model="searchValue"
+        class="input input-primary w-full max-w-xs focus:outline-none focus:bg-base-200"
+        :class="[
+          {'input-sm': !lg},
+          {'input-lg': lg},
+        ]"
+        placeholder="Поиск"
+        type="text"
+        @keyup.enter="submitSearch"
+    >
     <div class="navbar-end lg:gap-4 gap-1">
 <!--      <div class="dropdown dropdown-end">-->
 <!--        <div tabindex="0" role="button" class="btn btn-ghost btn-circle">-->

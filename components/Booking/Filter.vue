@@ -3,20 +3,44 @@ import VueDatePicker from '@vuepic/vue-datepicker';
 import SelectBase from '~/components/SelectBase.vue';
 import {breakpointsTailwind} from '@vueuse/core';
 
+interface FilterPayload {
+  city?: string
+  category?: string
+  minPrice?: number
+  maxPrice?: number
+  inStock?: boolean
+  date?: string
+  time?: string
+}
 
-const date = ref();
+const emit = defineEmits<{
+  (e: 'apply', filters: FilterPayload): void
+}>()
+
+const date = ref<Date | null>(null);
 const { lg } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
 const menuStore = useMenuStore()
 const { menuHeader } = storeToRefs(menuStore)
 
-const categorySelector = menuHeader.value.map(el=>{
-  return {
-    name: el.name,
-    value: el.value,
-  }
+const minPriceInput = ref('')
+const maxPriceInput = ref('')
+const inStockOnly = ref(false)
+
+const categorySelector = computed(() => {
+  return menuHeader.value.flatMap((category: any) => {
+    const children = Array.isArray(category?.children) ? category.children : []
+
+    return [
+      ...(category?.id && category?.name ? [{ name: category.name, value: category.id }] : []),
+      ...children
+        .filter((child: any) => child?.id && child?.name)
+        .map((child: any) => ({ name: `${category.name} / ${child.name}`, value: child.id })),
+    ]
+  })
 })
 
-const selectedCity = ref();
+const selectedCity = ref<{ name: string; value: string } | null>(null);
+const selectedCategory = ref<{ name: string; value: string } | null>(null);
 
 const time = ref({
   hours: new Date().getHours(),
@@ -56,6 +80,27 @@ const citiList = [
     value: 'andijan',
   }
 ]
+
+function parsePrice(value: string): number | undefined {
+  const price = Number(value)
+  if (!value || Number.isNaN(price) || price < 0)
+    return undefined
+
+  return price
+}
+
+function handleApply() {
+  const payload: FilterPayload = {
+    city: selectedCity.value?.name,
+    category: selectedCategory.value?.value ? String(selectedCategory.value.value) : undefined,
+    minPrice: parsePrice(minPriceInput.value),
+    maxPrice: parsePrice(maxPriceInput.value),
+    date: date.value ? date.value.toISOString() : undefined,
+    time: `${String(time.value.hours).padStart(2, '0')}:${String(time.value.minutes).padStart(2, '0')}`,
+  }
+
+  emit('apply', payload)
+}
 </script>
 
 <template>
@@ -84,8 +129,22 @@ const citiList = [
       :min-time="minTime"
       select-text="Выбрать"
   />
-  <SelectBase v-model="selectedCity" :size="lg ? 'lg' : 'md'" :items="categorySelector" placeholder="Выберите категорию" class="!w-full lg:w-max"/>
-  <Button class="mt-4 lg:mt-0" :size="lg ? 'lg' : 'md'">
+  <SelectBase v-model="selectedCategory" :size="lg ? 'lg' : 'md'" :items="categorySelector" placeholder="Выберите категорию" class="!w-full lg:w-max"/>
+  <input
+      v-model="minPriceInput"
+      class="input input-md border-gray-200 w-full lg:w-36"
+      min="0"
+      placeholder="Цена от"
+      type="number"
+  >
+  <input
+      v-model="maxPriceInput"
+      class="input input-md border-gray-200 w-full lg:w-36"
+      min="0"
+      placeholder="Цена до"
+      type="number"
+  >
+  <Button class="mt-4 lg:mt-0" :size="lg ? 'lg' : 'md'" @click="handleApply">
     Применить фильтры
   </Button>
 </div>
