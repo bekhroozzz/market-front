@@ -28,6 +28,11 @@ const authModal = useModal({
   }
 })
 
+function closeMenu() {
+  menuModal.close()
+  isOpen.value = false
+}
+
 const menuModal =   useModal(
     {
       component: LazyMenuModalCatalog,
@@ -35,7 +40,8 @@ const menuModal =   useModal(
         default: useModalSlot({
           component: LazyMenuCatalog,
           attrs:{
-            menu: menuHeader.value
+            menu: menuHeader.value,
+            onNavigate: closeMenu,
           },
         }),
       },
@@ -43,11 +49,13 @@ const menuModal =   useModal(
 
 
 onClickOutside(menuRef, () => {
-  if (isOpen.value){
-    menuModal.close()
-    isOpen.value = false
+  if (isOpen.value)
+    closeMenu()
+})
 
-  }
+watch(() => route.path, () => {
+  if (isOpen.value)
+    closeMenu()
 })
 
 function toggleMenu(opened: boolean) {

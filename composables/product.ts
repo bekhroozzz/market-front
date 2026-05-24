@@ -46,6 +46,7 @@ export interface SearchProductsResponse {
       rating: number
       salesCount: number
       createdAt: string
+      images: string[]
     }
     score: number
     highlight?: {

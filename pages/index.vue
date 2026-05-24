@@ -209,7 +209,7 @@ function handleFiltersApply(payload: FiltersApplyPayload) {
 
 <template>
   <div class="my-10 flex flex-col">
-    <BookingFilter class="mb-10 mx-auto px-4" @apply="handleFiltersApply"/>
+    <BookingFilter class="mb-10 mx-auto px-4 lg:w-1/2" @apply="handleFiltersApply"/>
     <div v-if="route?.query?.q?.length" class="px-4 lg:px-0 mx-auto w-full max-w-screen-2xl mb-4 text-sm opacity-80 flex items-center gap-3">
       <span>Найдено товаров: {{ foundCount }}</span>
       <span v-if="pending" class="loading loading-spinner loading-sm"/>

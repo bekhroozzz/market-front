@@ -4,6 +4,12 @@ import {useModal, useModalSlot} from 'vue-final-modal';
 import {LazyModalTemplate, LazyProductPhotoFullScreen} from '#components';
 import {getAllProducts, getProductById, type Offer} from '~/composables/product';
 
+interface Category {
+  id: string
+  name: string
+  children?: Category[]
+}
+
 const route = useRoute()
 const routeSlug = String(route.params.slug || '')
 
@@ -61,12 +67,38 @@ async function getOfferBySlugOrId(slugOrId: string) {
   }
 }
 
+const menuStore = useMenuStore()
+const { menuHeader } = storeToRefs(menuStore)
+
+function buildCategoryPath(categories: Category[], targetId: string, path: Category[] = []): Category[] | null {
+  for (const cat of categories) {
+    const current = [...path, cat]
+    if (cat.id === targetId) return current
+    if (cat.children?.length) {
+      const found = buildCategoryPath(cat.children, targetId, current)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 const { data: offer } = await useAsyncData(`offer-${routeSlug}`, () => getOfferBySlugOrId(routeSlug))
 
 if (!offer.value)
   throw createError({ statusCode: 404, statusMessage: 'Товар не найден' })
 
 const productData = ref<ProductViewModel>(mapOfferToViewModel(offer.value))
+
+const breadcrumbs = computed(() => {
+  const categoryPath = offer.value?.category_id
+    ? buildCategoryPath(menuHeader.value as Category[], offer.value.category_id) ?? []
+    : []
+
+  return [
+    ...categoryPath.map(cat => ({ label: cat.name, to: `/catalog/${cat.id}` })),
+    { label: productData.value.name },
+  ]
+})
 
 const photoModal = useModal({
   component: LazyModalTemplate,
@@ -91,7 +123,7 @@ const photoModal = useModal({
 
 <template>
     <div class="container mx-auto px-4 pb-8">
-      <Breadcrumbs class="pb-8 pt-4"/>
+      <Breadcrumbs :items="breadcrumbs" class="pb-8 pt-4"/>
       <div class="flex gap-6 lg:flex-row flex-col">
         <ProductPhotoBlock v-bind="productData" @handle-main-photo-click="photoModal.open"/>
         <ProductInfoBar v-bind="productData"/>

@@ -100,7 +100,7 @@ function handleApply() {
 </script>
 
 <template>
-<div class="flex flex-col gap-2 w-full lg:w-1/2 shadow-base-300">
+<div class="flex flex-col gap-2 w-full shadow-base-300">
   <SelectBase v-model="selectedCity" :size="lg ? 'lg' : 'md'" :items="citiList" placeholder="Выберите город" class="!w-full lg:w-max"/>
  <div class="flex gap-2">
   <VueDatePicker
