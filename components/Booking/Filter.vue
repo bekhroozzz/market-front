@@ -41,11 +41,7 @@ const categorySelector = computed(() => {
 
 const selectedCity = ref<{ name: string; value: string } | null>(null);
 const selectedCategory = ref<{ name: string; value: string } | null>(null);
-
-const time = ref({
-  hours: new Date().getHours(),
-  minutes: new Date().getMinutes()
-});
+const time = ref({ hours: new Date().getHours(), minutes: new Date().getMinutes()});
 
 const now = new Date()
 now.setHours(now.getHours() + 1)
@@ -104,8 +100,9 @@ function handleApply() {
 </script>
 
 <template>
-<div class="flex lg:flex-row flex-col gap-2 w-full lg:w-max shadow-base-300">
+<div class="flex flex-col gap-2 w-full shadow-base-300">
   <SelectBase v-model="selectedCity" :size="lg ? 'lg' : 'md'" :items="citiList" placeholder="Выберите город" class="!w-full lg:w-max"/>
+ <div class="flex gap-2">
   <VueDatePicker
       v-model="date"
       placeholder="Выберите дату"
@@ -129,21 +126,24 @@ function handleApply() {
       :min-time="minTime"
       select-text="Выбрать"
   />
+ </div>
   <SelectBase v-model="selectedCategory" :size="lg ? 'lg' : 'md'" :items="categorySelector" placeholder="Выберите категорию" class="!w-full lg:w-max"/>
-  <input
+  <div class="flex gap-2">
+    <input
       v-model="minPriceInput"
-      class="input input-md border-gray-200 w-full lg:w-36"
+      class="input input-md border-gray-200 w-full"
       min="0"
       placeholder="Цена от"
       type="number"
   >
   <input
       v-model="maxPriceInput"
-      class="input input-md border-gray-200 w-full lg:w-36"
+      class="input input-md border-gray-200 w-full"
       min="0"
       placeholder="Цена до"
       type="number"
   >
+  </div>
   <Button class="mt-4 lg:mt-0" :size="lg ? 'lg' : 'md'" @click="handleApply">
     Применить фильтры
   </Button>
