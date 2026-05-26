@@ -1,20 +1,30 @@
 <script setup lang="ts">
 import {breakpointsTailwind} from '@vueuse/core';
 
-interface Props{
-  name:string
-  description:string
-  reviewCount:number
-  price:number
-  oldPrice:number,
-  rating: number,
+interface Props {
+  name: string
+  description: string
+  reviewCount: number
+  price: number
+  oldPrice: number
+  rating: number
+  sellerId?: number | null
+  sellerCompanyName?: string | null
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 const route = useRoute()
 
 const { lg } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
+
+const sellerLink = computed(() =>
+  props.sellerId ? `/seller/${props.sellerId}` : null,
+)
+
+const displayName = computed(() =>
+  props.sellerCompanyName?.trim() || (props.sellerId ? `Продавец #${props.sellerId}` : null),
+)
 </script>
 
 <template>
@@ -41,18 +51,23 @@ const { lg } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
       {{description}}
     </p>
 
-    <NuxtLink to="/seller/slug" class="flex items-center gap-4 w-full lg:w-max px-8 py-4 mb-8 border border-gray-200 rounded-xl">
-      <div class="avatar avatar-online">
-        <div class="w-10 rounded-full">
-          <img src="https://img.daisyui.com/images/profile/demo/gordon@192.webp" />
-        </div>
+    <NuxtLink
+      v-if="sellerLink && displayName"
+      :to="sellerLink"
+      class="flex items-center gap-4 w-full lg:w-max px-6 py-4 mb-8 border border-gray-200 rounded-xl hover:border-primary hover:bg-base-200 transition-colors"
+    >
+      <div
+        class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg flex-shrink-0"
+      >
+        {{ displayName.charAt(0).toUpperCase() }}
       </div>
-      <div class="flex gap-2">
-        <span class="text-[16px] uppercase font-semibold">
-        "ООО Буллинг"
-      </span>
-        <Icon name="24x24/star" size="24"/> 4.7
+      <div class="flex flex-col gap-0.5">
+        <span class="text-sm text-base-content/50 uppercase tracking-wide">Продавец</span>
+        <span class="font-semibold text-base-content">{{ displayName }}</span>
       </div>
+      <svg xmlns="http://www.w3.org/2000/svg" class="ml-auto w-5 h-5 text-base-content/30 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+      </svg>
     </NuxtLink>
     <div class="flex flex-col w-full gap-4 mb-8">
       <Button icon-size="16" icon-name="16x16/calendar-add" size="lg" class="w-full" :to="`/booking/${route.params.slug}`">
