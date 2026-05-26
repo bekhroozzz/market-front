@@ -1,7 +1,6 @@
 import type { Offer } from './product'
 
 export interface Branch {
-  id: string
   title: string
   address: string
   latitude?: number

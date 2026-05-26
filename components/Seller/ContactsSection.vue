@@ -28,8 +28,8 @@ defineProps<{
 
     <div v-if="branches.length" class="grid gap-3 sm:grid-cols-2">
       <div
-        v-for="branch in branches"
-        :key="branch.id"
+        v-for="(branch, idx) in branches"
+        :key="idx"
         class="card card-compact bg-base-200 shadow-sm"
       >
         <div class="card-body">
