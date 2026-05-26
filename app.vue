@@ -19,7 +19,8 @@ if (refreshToken.value) {
 </script>
 
 <template>
-    <NuxtLayout>
+  <NuxtLoadingIndicator />
+  <NuxtLayout>
       <NuxtPage/>
       <ClientOnly>
         <ModalsContainer />
