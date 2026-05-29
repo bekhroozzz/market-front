@@ -216,7 +216,7 @@ function handleFiltersApply(payload: FiltersApplyPayload) {
       <span v-if="isSearchFallback" class="text-warning">Поисковый сервис временно недоступен — применён локальный поиск.</span>
     </div>
     <!-- <ProductFeedCards v-if="recommendedProducts.length" :products="recommendedProducts"/> -->
-    <div v-if="products.length" class="grid lg:px-0 px-4  grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mx-auto gap-4">
+    <div v-if="products.length" class="grid lg:px-0 px-4  grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 mx-auto gap-4">
       <ProductCard
           v-for="(product, index) in products"
           is-swiper-img

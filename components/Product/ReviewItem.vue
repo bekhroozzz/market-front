@@ -1,39 +1,52 @@
 <script setup lang="ts">
 interface Props {
-  id: number | string
+  id: string
   text: string
-  author: string
-  profileImage: string
-  publishedDate: string
-  ratingMark: number
+  rating: number
+  createdAt: string
+  author?: string
+  profileImage?: string
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
+
+const formattedDate = computed(() => {
+  try {
+    return new Date(props.createdAt).toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+  } catch {
+    return ''
+  }
+})
 </script>
 
 <template>
-  <div class="aspect-auto p-8 border border-gray-100 rounded-3xl shadow-2xl">
+  <div class="aspect-auto p-6 border border-gray-100 rounded-3xl shadow-md">
     <div class="flex gap-4">
-      <img class="w-12 h-12 rounded-full" :src="profileImage" alt="user avatar" width="400" height="400" loading="lazy">
+      <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg flex-shrink-0">
+        <img v-if="profileImage" class="w-12 h-12 rounded-full object-cover" :src="profileImage" alt="avatar" loading="lazy" />
+        <span v-else>{{ (author ?? 'А').charAt(0).toUpperCase() }}</span>
+      </div>
       <div class="flex flex-col w-full">
-        <h6 class="text-lg font-medium text-gray-700 flex justify-between dark:text-white">
-          <span>{{author}}</span>
-          <span class="text-[12px] lg:text-[14px]">
-            {{publishedDate}}
-          </span>
+        <h6 class="text-base font-medium text-gray-700 flex justify-between dark:text-white">
+          <span>{{ author ?? 'Гость' }}</span>
+          <span class="text-xs text-base-content/50">{{ formattedDate }}</span>
         </h6>
-        <p class="text-sm flex gap-4  items-center">
-         <span class="flex gap-1">
-           <Icon v-for="_ in ratingMark" :key="_" name="24x24/star" size="24"/>
-         </span>
-          <span>
-            4.6
-          </span>
-        </p>
+        <div class="flex items-center gap-1 mt-1">
+          <Icon
+            v-for="i in 5"
+            :key="i"
+            name="24x24/star"
+            size="18"
+            :class="i <= rating ? 'text-yellow-400' : 'text-base-content/20'"
+          />
+          <span class="text-sm ml-1 text-base-content/60">{{ rating }}/5</span>
+        </div>
       </div>
     </div>
-    <p class="mt-8">
-      {{text}}
-    </p>
+    <p class="mt-4 text-sm leading-relaxed text-base-content/80">{{ text }}</p>
   </div>
 </template>
