@@ -21,7 +21,6 @@ export default defineNuxtConfig({
       link: [],
       script: [],
     },
-    pageTransition: { name: 'page', mode: 'out-in' }
   },
   nitro: {
     compressPublicAssets: true,

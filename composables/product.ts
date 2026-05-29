@@ -11,6 +11,14 @@ export interface Offer {
   inStock?: boolean
   category_id?: string | null
   branchAddress?: string
+  author?: {
+    id: number,
+    email: string,
+    role: string,
+    phone: string,
+    createdAt: Date,
+    updatedAt: Date
+  }
 }
 
 export interface SearchProductsParams {

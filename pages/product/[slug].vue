@@ -3,6 +3,7 @@ import Breadcrumbs from '~/components/Breadcrumbs.vue';
 import {useModal, useModalSlot} from 'vue-final-modal';
 import {LazyModalTemplate, LazyProductPhotoFullScreen} from '#components';
 import {getAllProducts, getProductById, type Offer} from '~/composables/product';
+import { getSellerProfile } from '~/composables/seller';
 
 interface Category {
   id: string
@@ -126,7 +127,11 @@ const photoModal = useModal({
       <Breadcrumbs :items="breadcrumbs" class="pb-8 pt-4"/>
       <div class="flex gap-6 lg:flex-row flex-col">
         <ProductPhotoBlock v-bind="productData" @handle-main-photo-click="photoModal.open"/>
-        <ProductInfoBar v-bind="productData"/>
+        <ProductInfoBar
+          v-bind="productData"
+          :seller-id="offer?.author?.id"
+          :seller-company-name="offer?.author?.email"
+        />
       </div>
       <div class="divider my-6 lg:my-10"></div>
       <ProductReviewBlock/>
