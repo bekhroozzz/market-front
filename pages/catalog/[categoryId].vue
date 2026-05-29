@@ -17,7 +17,7 @@ interface ProductCardViewModel {
 }
 
 const route = useRoute()
-const { lg } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
+const { lg, sm } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
 const menuStore = useMenuStore()
 const { menuHeader } = storeToRefs(menuStore)
 
@@ -167,7 +167,7 @@ const headerHeight = 48 // matches navbar sticky top-0 (h-16)
     <div
       v-if="subcategories.length"
       ref="subBarRef"
-      class="sticky flex items-center justify-between z-40 glass shadow-md border-b border-base-content/10"
+      class="sticky flex lg:flex-row flex-col lg:items-center lg:justify-between z-40 glass shadow-md border-b border-base-content/10"
       :style="`top: ${headerHeight}px`"
     >
       <div class="flex overflow-x-auto gap-2 px-4 lg:px-8 py-3 scrollbar-hide">
@@ -203,17 +203,17 @@ const headerHeight = 48 // matches navbar sticky top-0 (h-16)
     </div>
 
     <!-- Products Grid -->
-    <div class="px-4 lg:px-8">
+    <div class="px-0 lg:px-8">
       <div
         v-if="products.length"
-        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 2xl:grid-cols-5"
+        class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 lg:gap-4 2xl:grid-cols-5 xl:w-max mx-auto"
       >
         <ProductCard
           v-for="(product, index) in products"
           :key="index"
           v-bind="product"
           is-swiper-img
-          :size="lg ? 'md' : 'sm'"
+          :size="lg ? 'md' : sm ? 'sm' : 'xs'"
         />
       </div>
 

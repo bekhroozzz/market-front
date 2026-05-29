@@ -103,12 +103,27 @@ export interface SearchProductsResponse {
   }[]
 }
 
-export async function getAllProducts() {
-  return useNuxtApp().$api<Offer[]>('/api/offer/all', { method: 'GET' })
+export interface PaginatedOffersResponse {
+  items: Offer[]
+  total: number
+  page: number
+  limit: number
+  pages: number
+}
+
+export async function getAllProducts(page = 1, limit = 20): Promise<PaginatedOffersResponse> {
+  return useNuxtApp().$api<PaginatedOffersResponse>('/api/offer/all', {
+    method: 'GET',
+    query: { page, limit },
+  })
 }
 
 export async function getProductById(id: string) {
   return useNuxtApp().$api<Offer>(`/api/offer/find-by-id/${id}`, { method: 'GET' })
+}
+
+export async function getProductBySlug(slug: string) {
+  return useNuxtApp().$api<Offer>(`/api/offer/find-by-slug/${slug}`, { method: 'GET' })
 }
 
 export async function searchProducts(params: SearchProductsParams = {}) {

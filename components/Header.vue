@@ -74,7 +74,7 @@ function normalizeQuerySearch(value: unknown): string {
 }
 
 watch(
-  () => route.query.q,
+  () => route?.query?.q,
   (value) => {
     searchValue.value = normalizeQuerySearch(value)
   },
