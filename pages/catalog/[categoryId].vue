@@ -206,7 +206,7 @@ const headerHeight = 48 // matches navbar sticky top-0 (h-16)
     <div class="px-4 lg:px-8">
       <div
         v-if="products.length"
-        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 2xl:grid-cols-5"
       >
         <ProductCard
           v-for="(product, index) in products"

@@ -19,7 +19,11 @@ if (refreshToken.value) {
 </script>
 
 <template>
-  <NuxtLoadingIndicator />
+  <NuxtLoadingIndicator
+    :throttle="200"
+    color="var(--color-primary)"
+    :height="4"
+  />
   <NuxtLayout>
       <NuxtPage/>
       <ClientOnly>
