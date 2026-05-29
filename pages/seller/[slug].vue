@@ -35,7 +35,7 @@ useSeoMeta({
 </script>
 
 <template>
-  <div class="container mx-auto px-4 py-8 max-w-7xl">
+  <div class="container mx-auto px-4 py-8">
     <!-- Error state -->
     <div v-if="error" class="text-center py-20">
       <p class="text-error text-lg">Продавец не найден или произошла ошибка.</p>

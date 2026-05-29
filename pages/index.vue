@@ -4,8 +4,8 @@ import {
   searchProducts,
   type Offer,
   type SearchProductsResponse,
-} from '~/composables/product';
-import {breakpointsTailwind} from '@vueuse/core';
+} from '~/composables/product'
+import { breakpointsTailwind } from '@vueuse/core'
 
 interface HomeFilters {
   city?: string
@@ -22,16 +22,71 @@ interface ProductCardViewModel {
   images: { src: string; active: boolean }[]
 }
 
-const { lg } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
+const { lg, sm } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
 const route = useRoute()
 
 const filters = ref<HomeFilters>({})
 const isSearchFallback = ref(false)
 const hasSearched = ref(false)
 
-const { data: allProducts } = await useAsyncData('home-all-products', () => getAllProducts())
+// --- Infinite scroll state ---
+const infiniteScrollSentinel = ref<HTMLElement | null>(null)
 
-const { data: searchData, pending, execute: runSearch } = await useAsyncData<SearchProductsResponse | null>('home-search-products',
+function mapImages(images?: string[]) {
+  const mapped = (images || [])
+    .filter(Boolean)
+    .map((src, index) => ({ src, active: index === 0 }))
+  return mapped.length ? mapped : [{ src: '/1.jpg', active: true }]
+}
+
+function mapOfferToCard(offer: Offer): ProductCardViewModel {
+  return {
+    url: `/product/${offer.slug || offer.id}`,
+    title: offer.title,
+    description: offer.description,
+    images: mapImages(offer.images),
+  }
+}
+
+// Первая страница — через useAsyncData, чтобы результат передался из SSR в клиент
+// без повторного запроса при гидрации
+const { data: firstPageData } = await useAsyncData('home-offers-p1', () => getAllProducts(1, 20))
+
+const page = ref(1)
+const totalPages = ref(firstPageData.value?.pages ?? 1)
+const accumulatedProducts = ref<ProductCardViewModel[]>(
+  (firstPageData.value?.items ?? []).map(mapOfferToCard),
+)
+const loadingMore = ref(false)
+
+async function fetchNextPage() {
+  if (loadingMore.value || page.value >= totalPages.value) return
+  page.value++
+  loadingMore.value = true
+  try {
+    const result = await getAllProducts(page.value, 20)
+    totalPages.value = result.pages
+    accumulatedProducts.value.push(...result.items.map(mapOfferToCard))
+  }
+  finally {
+    loadingMore.value = false
+  }
+}
+
+// Intersection Observer — только на клиенте, SSR не трогает
+onMounted(() => {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0]?.isIntersecting) void fetchNextPage()
+    },
+    { rootMargin: '200px' },
+  )
+  if (infiniteScrollSentinel.value) observer.observe(infiniteScrollSentinel.value)
+  onUnmounted(() => observer.disconnect())
+})
+
+// --- Search state ---
+const { data: searchData, pending: searchPending, execute: runSearch } = await useAsyncData<SearchProductsResponse | null>('home-search-products',
   async () => {
     const queryText = [headerSearchText.value, filters.value.city?.trim()]
       .filter(Boolean)
@@ -52,7 +107,8 @@ const { data: searchData, pending, execute: runSearch } = await useAsyncData<Sea
       const data = await searchProducts(searchQuery)
       isSearchFallback.value = false
       return data
-    } catch {
+    }
+    catch {
       isSearchFallback.value = true
       return null
     }
@@ -63,76 +119,13 @@ const { data: searchData, pending, execute: runSearch } = await useAsyncData<Sea
   },
 )
 
-
-const allProductsById = computed(() => {
-  return new Map((allProducts.value || []).map((product) => [product.id, product]))
-})
-
-function mapImages(images?: string[]) {
-  const mapped = (images || [])
-    .filter(Boolean)
-    .map((src, index) => ({ src, active: index === 0 }))
-
-  return mapped.length ? mapped : [{ src: '/1.jpg', active: true }]
-}
-
-function mapOfferToCard(offer: Offer): ProductCardViewModel {
-  return {
-    url: `/product/${offer.slug || offer.id}`,
-    title: offer.title,
-    description: offer.description,
-    images: mapImages(offer.images),
-  }
-}
-
 function normalizeQueryValue(value: unknown): string {
-  if (Array.isArray(value))
-    return String(value[0] || '').trim()
-  if (typeof value === 'string')
-    return value.trim()
+  if (Array.isArray(value)) return String(value[0] || '').trim()
+  if (typeof value === 'string') return value.trim()
   return ''
 }
 
-const headerSearchText = computed(() => normalizeQueryValue(route.query.q))
-
-function matchLocalFilters(offer: Offer) {
-  const query = headerSearchText.value.toLowerCase()
-  const city = filters.value.city?.trim().toLowerCase()
-  const minPrice = filters.value.minPrice
-  const maxPrice = filters.value.maxPrice
-
-  if (query) {
-    const text = `${offer.title || ''} ${offer.description || ''}`.toLowerCase()
-    if (!text.includes(query))
-      return false
-  }
-
-  if (city) {
-    const address = (offer.branchAddress || '').toLowerCase()
-    if (!address.includes(city))
-      return false
-  }
-
-  if (filters.value.category && offer.category_id !== filters.value.category)
-    return false
-
-  if (typeof minPrice === 'number' && (offer.price || 0) < minPrice)
-    return false
-
-  if (typeof maxPrice === 'number' && (offer.price || 0) > maxPrice)
-    return false
-
-  if (filters.value.inStock && !offer.inStock)
-    return false
-
-  return true
-}
-
-const fallbackProducts = computed(() => {
-  return (allProducts.value || [])
-    .filter(matchLocalFilters)
-    .map(mapOfferToCard)
-})
+const headerSearchText = computed(() => normalizeQueryValue(route?.query?.q))
 
 const hasSearchCriteria = computed(() => {
   return Boolean(
@@ -152,46 +145,37 @@ async function applySearchState() {
     isSearchFallback.value = false
     return
   }
-
   hasSearched.value = true
   await runSearch()
 }
 
-watch(() => route.query.q,() => {
-    void applySearchState()
-  },
+watch(() => route?.query?.q, () => {
+  void applySearchState()
+})
+
+const foundCount = computed(() => searchData.value?.total ?? 0)
+
+const searchCards = computed<ProductCardViewModel[]>(() => {
+  if (!searchData.value) return []
+  return searchData.value.items.map(item => ({
+    url: `/product/${item.document.slug || item.document.id}`,
+    title: item.document.title,
+    description: item.document.description,
+    images: item.document.images?.length
+      ? item.document.images.filter(Boolean).map((src, i) => ({ src, active: i === 0 }))
+      : [{ src: '/1.jpg', active: true }],
+  }))
+})
+
+const displayProducts = computed<ProductCardViewModel[]>(() =>
+  hasSearched.value ? searchCards.value : accumulatedProducts.value,
 )
 
-const products = computed(() => {
-  if (!hasSearched.value)
-    return (allProducts.value || []).map(mapOfferToCard)
+const hasMore = computed(() => !hasSearched.value && page.value < totalPages.value)
 
-  if (!searchData.value)
-    return fallbackProducts.value
-
-  return searchData.value.items.map((item) => {
-    const productFromOffers = allProductsById.value.get(item.document.id)
-
-    if (productFromOffers)
-      return mapOfferToCard(productFromOffers)
-
-    return {
-      url: `/product/${item.document.slug || item.document.id}`,
-      title: item.document.title,
-      description: item.document.description,
-      images: [{ src: '/1.jpg', active: true }],
-    }
-  })
-})
-
-// const recommendedProducts = computed(() => products.value.slice(0, 12))
-
-const foundCount = computed(() => {
-  if (searchData.value)
-    return searchData.value.total
-
-  return fallbackProducts.value.length
-})
+function loadMore() {
+  void fetchNextPage()
+}
 
 interface FiltersApplyPayload {
   city?: string
@@ -209,24 +193,48 @@ function handleFiltersApply(payload: FiltersApplyPayload) {
 
 <template>
   <div class="my-10 flex flex-col">
-    <BookingFilter class="mb-10 mx-auto px-4 lg:w-1/2" @apply="handleFiltersApply"/>
-    <div v-if="route?.query?.q?.length" class="px-4 lg:px-0 mx-auto w-full max-w-screen-2xl mb-4 text-sm opacity-80 flex items-center gap-3">
+    <BookingFilter class="mb-10 mx-auto px-4 lg:w-1/2" @apply="handleFiltersApply" />
+
+    <!-- Search results header -->
+    <div
+      v-if="route?.query?.q?.length"
+      class="px-4 lg:px-0 mx-auto w-full max-w-screen-2xl mb-4 text-sm opacity-80 flex items-center gap-3"
+    >
       <span>Найдено товаров: {{ foundCount }}</span>
-      <span v-if="pending" class="loading loading-spinner loading-sm"/>
-      <span v-if="isSearchFallback" class="text-warning">Поисковый сервис временно недоступен — применён локальный поиск.</span>
+      <span v-if="searchPending" class="loading loading-spinner loading-sm" />
+      <span v-if="isSearchFallback" class="text-warning">
+        Поисковый сервис временно недоступен — применён локальный поиск.
+      </span>
     </div>
-    <!-- <ProductFeedCards v-if="recommendedProducts.length" :products="recommendedProducts"/> -->
-    <div v-if="products.length" class="grid lg:px-0 px-4  grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 mx-auto gap-4">
+    <div
+      v-if="displayProducts.length"
+      class="grid lg:px-0 lg:px-4 px-0 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 mx-auto gap-2 lg:gap-4"
+    >
       <ProductCard
-          v-for="(product, index) in products"
-          is-swiper-img
-          v-bind="product"
-          :size="lg ? 'md' : 'sm'"
-          :key="index"
-      />
+        v-for="(product, index) in displayProducts"
+        :key="index"
+        is-swiper-img
+        v-bind="product"
+        :size="lg ? 'md' : sm ? 'sm' : 'xs'"
+        />
     </div>
-    <div v-if="route?.query?.q?.length && !products?.length" class="text-center py-12 text-base-content/70">
+
+    <div
+      v-if="route?.query?.q?.length && !displayProducts?.length && !searchPending"
+      class="text-center py-12 text-base-content/70"
+    >
       По вашему запросу ничего не найдено. Попробуйте изменить фильтры.
+    </div>
+
+    <div v-if="hasMore" ref="infiniteScrollSentinel" class="flex justify-center mt-6">
+      <button
+        class="btn btn-outline btn-primary"
+        :disabled="loadingMore"
+        @click="loadMore"
+      >
+        <span v-if="loadingMore" class="loading loading-spinner loading-sm mr-2" />
+        {{ loadingMore ? 'Загружаем...' : 'Загрузить ещё' }}
+      </button>
     </div>
   </div>
 </template>

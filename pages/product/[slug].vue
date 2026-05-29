@@ -2,7 +2,7 @@
 import Breadcrumbs from '~/components/Breadcrumbs.vue'
 import { useModal, useModalSlot } from 'vue-final-modal'
 import { LazyModalTemplate, LazyProductPhotoFullScreen } from '#components'
-import { getAllProducts, getProductById, type Offer } from '~/composables/product'
+import { getProductById, getProductBySlug, type Offer } from '~/composables/product'
 
 interface Category {
   id: string
@@ -44,14 +44,12 @@ function mapOfferToViewModel(o: Offer): ProductViewModel {
 async function getOfferBySlugOrId(slugOrId: string): Promise<Offer> {
   if (uuidV4Regex.test(slugOrId)) return getProductById(slugOrId)
 
-  const offers = await getAllProducts()
-  const matched = offers.find((item) => item.slug === slugOrId || item.id === slugOrId)
-  if (!matched) throw createError({ statusCode: 404, statusMessage: 'Товар не найден' })
-
   try {
-    return await getProductById(matched.id)
-  } catch {
-    return matched
+    const bySlug = await getProductBySlug(slugOrId)
+    return await getProductById(bySlug.id)
+  }
+  catch {
+    throw createError({ statusCode: 404, statusMessage: 'Товар не найден' })
   }
 }
 
