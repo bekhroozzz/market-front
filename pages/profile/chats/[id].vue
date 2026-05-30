@@ -17,6 +17,9 @@ const chatId = String(route.params.id)
 
 const { getChat, getMessages, sendMessage, markRead } = useChat()
 const { onMessageCreated, onMessageRead, joinChat, leaveChat } = useChatSocket()
+
+let unsubMessageCreated: (() => void) | null = null
+let unsubMessageRead: (() => void) | null = null
 const notifStore = useNotificationStore()
 
 const chat = ref<Chat | null>(null)
@@ -59,7 +62,7 @@ onMounted(async () => {
       .forEach((n) => notifStore.markRead(n.id))
     joinChat(chatId)
 
-    onMessageCreated((msg) => {
+    unsubMessageCreated = onMessageCreated((msg) => {
       if (msg.chatId !== chatId) return
 
       // Own message: try to replace the optimistic placeholder (tmp-*) first.
@@ -69,7 +72,6 @@ onMounted(async () => {
         if (tmpIdx !== -1) {
           messages.value[tmpIdx] = msg
           scrollToBottom()
-          markRead(chatId).catch(() => {})
           return
         }
       }
@@ -83,7 +85,7 @@ onMounted(async () => {
       markRead(chatId).catch(() => {})
     })
 
-    onMessageRead((data) => {
+    unsubMessageRead = onMessageRead((data) => {
       if (data.chatId === chatId) {
         messages.value = messages.value.map((m) => ({
           ...m,
@@ -103,6 +105,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   leaveChat(chatId)
+  unsubMessageCreated?.()
+  unsubMessageRead?.()
 })
 
 async function loadMore() {

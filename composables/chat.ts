@@ -96,16 +96,22 @@ export function useChat() {
 }
 
 export function useChatSocket() {
-  const onMessageCreated = (cb: (msg: ChatMessage) => void) => {
-    getSocket().on('message.created', cb)
+  const onMessageCreated = (cb: (msg: ChatMessage) => void): (() => void) => {
+    const s = getSocket()
+    s.on('message.created', cb)
+    return () => s.off('message.created', cb)
   }
 
-  const onChatCreated = (cb: (chat: Chat) => void) => {
-    getSocket().on('chat.created', cb)
+  const onChatCreated = (cb: (chat: Chat) => void): (() => void) => {
+    const s = getSocket()
+    s.on('chat.created', cb)
+    return () => s.off('chat.created', cb)
   }
 
-  const onMessageRead = (cb: (data: { chatId: string }) => void) => {
-    getSocket().on('message.read', cb)
+  const onMessageRead = (cb: (data: { chatId: string }) => void): (() => void) => {
+    const s = getSocket()
+    s.on('message.read', cb)
+    return () => s.off('message.read', cb)
   }
 
   const joinChat = (chatId: string) => {
