@@ -24,9 +24,12 @@
     "nuxt-lucide-icons": "1.0.5",
     "nuxt-swiper": "2.0.1",
     "pinia": "^3.0.3",
+    "socket.io-client": "^4.8.3",
+    "vee-validate": "^4.15.1",
     "vue": "^3.5.17",
     "vue-final-modal": "^4.5.5",
-    "vue-router": "^4.5.1"
+    "vue-router": "^4.5.1",
+    "yup": "^1.7.1"
   },
   "devDependencies": {
     "vite-svg-loader": "^5.1.0"

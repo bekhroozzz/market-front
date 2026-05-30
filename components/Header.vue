@@ -3,6 +3,7 @@ import {useModal, useModalSlot} from 'vue-final-modal'
 import {LazyModalTemplate, LazyAuthSignup, LazyMenuCatalog, LazyMenuModalCatalog} from '#components';
 import {useLogged} from '~/composables/states';
 import {breakpointsTailwind} from '@vueuse/core';
+import { useNotificationStore } from '~/stores/notification'
 
 const isOpen = ref<boolean>(false)
 const menuRef = ref(null)
@@ -13,6 +14,7 @@ const menuStore = useMenuStore()
 const { menuHeader } = storeToRefs(menuStore)
 const { lg } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
 const searchValue = ref('')
+const notifStore = useNotificationStore()
 
 const authModal = useModal({
   component: LazyModalTemplate,
@@ -137,26 +139,43 @@ async function submitSearch() {
 <!--          </div>-->
 <!--        </div>-->
 <!--      </div>-->
-      <div v-if="isLogged" class="dropdown dropdown-end">
-        <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
-          <div class="w-10 rounded-full">
-            <img
-                alt="Tailwind CSS Navbar component"
-                src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.webp" />
+      <div v-if="isLogged" class="flex items-center gap-1">
+        <!-- Chat icon with unread badge -->
+        <NuxtLink to="/profile/chats" class="btn btn-ghost btn-circle relative">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          <span
+            v-if="notifStore.unreadCount > 0"
+            class="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-error text-white text-[10px] font-bold leading-none"
+          >
+            {{ notifStore.unreadCount > 9 ? '9+' : notifStore.unreadCount }}
+          </span>
+        </NuxtLink>
+
+        <!-- User avatar dropdown -->
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
+            <div class="w-10 rounded-full">
+              <img
+                  alt="Tailwind CSS Navbar component"
+                  src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.webp" />
+            </div>
           </div>
+          <ul
+              tabindex="0"
+              class="menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow-lg">
+            <li>
+              <NuxtLink to="/profile/chats" class="justify-between">
+                Чаты
+                <span v-if="notifStore.unreadCount > 0" class="badge badge-error">{{ notifStore.unreadCount }}</span>
+              </NuxtLink>
+            </li>
+            <li><a>Settings</a></li>
+            <li><a>Logout</a></li>
+          </ul>
         </div>
-        <ul
-            tabindex="0"
-            class="menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow-lg">
-          <li>
-            <a class="justify-between">
-              Profile
-              <span class="badge">New</span>
-            </a>
-          </li>
-          <li><a>Settings</a></li>
-          <li><a>Logout</a></li>
-        </ul>
       </div>
       <Button
           v-else

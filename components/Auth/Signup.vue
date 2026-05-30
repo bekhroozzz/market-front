@@ -2,7 +2,6 @@
 import * as Yup from 'yup'
 import {useForm} from 'vee-validate';
 import {useSetTokens} from '~/composables/refresh-token';
-import {useLogged} from '~/composables/states';
 
 const tabs = ref(
     [

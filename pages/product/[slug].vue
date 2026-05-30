@@ -111,6 +111,7 @@ const photoModal = useModal({
       <ProductPhotoBlock v-bind="productData" @handle-main-photo-click="photoModal.open" />
       <ProductInfoBar
         v-bind="productData"
+        :offer-id="offer?.id"
         :seller-id="offer?.author?.id"
         :seller-company-name="offer?.author?.email"
         :branch-address="offer?.branchAddress"

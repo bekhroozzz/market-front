@@ -28,6 +28,7 @@ if (refreshToken.value) {
       <NuxtPage/>
       <ClientOnly>
         <ModalsContainer />
+        <ToastNotifications />
       </ClientOnly>
     </NuxtLayout>
 </template>

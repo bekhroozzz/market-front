@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { WorkScheduleDay, PriceTariff } from '~/composables/product'
+import { useChat } from '~/composables/chat'
+import { useLogged } from '~/composables/states'
 
 const DAY_NAMES = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 
@@ -10,6 +12,7 @@ interface Props {
   price: number
   oldPrice: number
   rating: number
+  offerId?: string | null
   sellerId?: number | null
   sellerCompanyName?: string | null
   branchAddress?: string
@@ -28,6 +31,28 @@ const props = withDefaults(defineProps<Props>(), {
 
 const route = useRoute()
 const { lg } = useBreakpoints({ lg: '1024px' }, { ssrWidth: 768 })
+
+const logged = useLogged()
+const { openChat } = useChat()
+const chatLoading = ref(false)
+
+async function handleWriteSeller() {
+  if (!logged.value) {
+    // Trigger auth modal or redirect
+    await navigateTo('/?auth=1')
+    return
+  }
+  if (!props.offerId) return
+  chatLoading.value = true
+  try {
+    const chat = await openChat(props.offerId)
+    await navigateTo(`/profile/chats/${chat.id}`)
+  } catch (e) {
+    console.error('Ошибка при открытии чата', e)
+  } finally {
+    chatLoading.value = false
+  }
+}
 
 const sellerLink = computed(() =>
   props.sellerId ? `/seller/${props.sellerId}` : null,
@@ -118,7 +143,16 @@ const PRICE_TYPE_LABELS: Record<string, string> = {
       <Button icon-size="16" icon-name="16x16/calendar-add" size="lg" class="w-full" :to="`/booking/${route.params.slug}`">
         Забронировать
       </Button>
-      <Button is-outline icon-name="24x24/support-agent" size="lg" class="w-full" icon-size="16">
+      <Button
+        is-outline
+        icon-name="24x24/support-agent"
+        size="lg"
+        class="w-full"
+        icon-size="16"
+        :disabled="chatLoading || !offerId"
+        @click="handleWriteSeller"
+      >
+        <span v-if="chatLoading" class="loading loading-spinner loading-xs mr-1" />
         Написать заведению
       </Button>
     </div>
