@@ -94,11 +94,11 @@ onMounted(async () => {
       }
     })
 
+    loadingChat.value = false
     await nextTick()
     scrollToBottom()
   } catch {
     error.value = 'Не удалось загрузить чат'
-  } finally {
     loadingChat.value = false
   }
 })
@@ -161,6 +161,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 function scrollToBottom() {
+  console.log('scrolling to bottom')
   nextTick(() => {
     if (messagesEl.value) {
       messagesEl.value.scrollTop = messagesEl.value.scrollHeight

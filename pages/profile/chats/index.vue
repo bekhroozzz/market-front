@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useChat, useChatSocket, type Chat } from '~/composables/chat'
-import { useLogged } from '~/composables/states'
+import { useLogged, useToken } from '~/composables/states'
+import { jwtDecode, type JwtPayload } from 'jwt-decode'
 
 definePageMeta({ middleware: [] })
 
@@ -11,12 +12,26 @@ if (!logged.value) {
 
 const config = useRuntimeConfig()
 
+const token = useToken()
+const currentUserId = computed<number | null>(() => {
+  if (!token.value) return null
+  try {
+    const decoded = jwtDecode<JwtPayload & { sub: string }>(token.value)
+    return Number(decoded.sub)
+  } catch {
+    return null
+  }
+})
+
 const { listChats } = useChat()
-const { onChatCreated } = useChatSocket()
+const { onChatCreated, onMessageRead } = useChatSocket()
 
 const chats = ref<Chat[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
+
+let unsubChatCreated: (() => void) | null = null
+let unsubMessageRead: (() => void) | null = null
 
 onMounted(async () => {
   try {
@@ -27,12 +42,33 @@ onMounted(async () => {
     loading.value = false
   }
 
-  onChatCreated((chat) => {
+  unsubChatCreated = onChatCreated((chat) => {
     if (!chats.value.find((c) => c.id === chat.id)) {
       chats.value.unshift(chat)
     }
   })
+
+  unsubMessageRead = onMessageRead((data) => {
+    const chat = chats.value.find((c) => c.id === data.chatId)
+    if (!chat) return
+    if (currentUserId.value === chat.buyerId) {
+      chat.unreadForBuyer = 0
+    } else if (currentUserId.value === chat.sellerId) {
+      chat.unreadForSeller = 0
+    }
+  })
 })
+
+onBeforeUnmount(() => {
+  unsubChatCreated?.()
+  unsubMessageRead?.()
+})
+
+function myUnread(chat: Chat): number {
+  if (currentUserId.value === chat.buyerId) return chat.unreadForBuyer
+  if (currentUserId.value === chat.sellerId) return chat.unreadForSeller
+  return 0
+}
 
 function formatTime(dateStr: string | null) {
   if (!dateStr) return ''
@@ -106,10 +142,10 @@ function getImage(chat: Chat) {
         <div class="flex flex-col items-end gap-1 flex-shrink-0">
           <span class="text-xs text-base-content/40">{{ formatTime(chat.lastMessageAt) }}</span>
           <span
-            v-if="chat.unreadForBuyer > 0 || chat.unreadForSeller > 0"
+            v-if="myUnread(chat) > 0"
             class="badge badge-primary badge-sm"
           >
-            {{ chat.unreadForBuyer || chat.unreadForSeller }}
+            {{ myUnread(chat) }}
           </span>
         </div>
       </NuxtLink>
