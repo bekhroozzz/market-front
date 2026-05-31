@@ -2,6 +2,7 @@
 import {useModal, useModalSlot} from 'vue-final-modal'
 import {LazyModalTemplate, LazyAuthSignup, LazyMenuCatalog, LazyMenuModalCatalog} from '#components';
 import {useLogged} from '~/composables/states';
+import {useLogout} from '~/composables/auth';
 import {breakpointsTailwind} from '@vueuse/core';
 import { useNotificationStore } from '~/stores/notification'
 
@@ -15,6 +16,11 @@ const { menuHeader } = storeToRefs(menuStore)
 const { lg } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
 const searchValue = ref('')
 const notifStore = useNotificationStore()
+
+async function logout() {
+  useLogout()
+  await navigateTo('/')
+}
 
 const authModal = useModal({
   component: LazyModalTemplate,
@@ -167,13 +173,21 @@ async function submitSearch() {
               tabindex="0"
               class="menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow-lg">
             <li>
+              <NuxtLink to="/profile/bookings" class="justify-between">
+                Мои брони
+              </NuxtLink>
+            </li>
+            <li>
               <NuxtLink to="/profile/chats" class="justify-between">
                 Чаты
                 <span v-if="notifStore.unreadCount > 0" class="badge badge-error">{{ notifStore.unreadCount }}</span>
               </NuxtLink>
             </li>
-            <li><a>Settings</a></li>
-            <li><a>Logout</a></li>
+            <li>
+              <button class="text-error w-full text-left" @click="logout">
+                Выйти
+              </button>
+            </li>
           </ul>
         </div>
       </div>

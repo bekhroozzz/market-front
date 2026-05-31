@@ -50,6 +50,7 @@ export interface Offer {
   features?: string[]
   rules?: string[]
   attributes?: AttributeEntry[]
+  autoConfirmBooking?: boolean
   author?: {
     id: number
     email: string
