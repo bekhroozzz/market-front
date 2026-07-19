@@ -16,10 +16,11 @@ const route = useRoute()
 const chatId = String(route.params.id)
 
 const { getChat, getMessages, sendMessage, markRead } = useChat()
-const { onMessageCreated, onMessageRead, joinChat, leaveChat } = useChatSocket()
+const { onMessageCreated, onMessageRead, onChatUpdated, joinChat, leaveChat } = useChatSocket()
 
 let unsubMessageCreated: (() => void) | null = null
 let unsubMessageRead: (() => void) | null = null
+let unsubChatUpdated: (() => void) | null = null
 const notifStore = useNotificationStore()
 
 const chat = ref<Chat | null>(null)
@@ -32,6 +33,7 @@ const sending = ref(false)
 const messageText = ref('')
 const messagesEl = ref<HTMLElement | null>(null)
 const error = ref<string | null>(null)
+let pendingMessageId: string | null = null
 
 // Derive current user id from token
 const token = useToken()
@@ -46,53 +48,52 @@ const currentUserId = computed<number | null>(() => {
 })
 
 onMounted(async () => {
+  unsubMessageCreated = onMessageCreated((msg) => {
+    if (msg.chatId !== chatId) return
+
+    if (msg.senderId === currentUserId.value) reconcileOwnMessage(msg)
+    else upsertMessage(msg)
+
+    if (msg.senderId !== currentUserId.value) {
+      void markCurrentChatRead().catch(() => {})
+    }
+    scrollToBottom()
+  })
+
+  unsubMessageRead = onMessageRead((data) => {
+    if (
+      data.chatId !== chatId ||
+      data.readerId === currentUserId.value ||
+      !data.readAt
+    ) return
+
+    const readAt = new Date(data.readAt).getTime()
+    messages.value = messages.value.map((message) => {
+      if (
+        message.senderId === currentUserId.value &&
+        new Date(message.createdAt).getTime() <= readAt
+      ) {
+        return { ...message, isRead: true, readAt: data.readAt }
+      }
+      return message
+    })
+  })
+
+  unsubChatUpdated = onChatUpdated((updatedChat) => {
+    if (updatedChat.id === chatId) chat.value = updatedChat
+  })
+  joinChat(chatId)
+
   try {
     const [chatData, msgData] = await Promise.all([
       getChat(chatId),
       getMessages(chatId, 1),
     ])
     chat.value = chatData
-    messages.value = msgData.data
+    messages.value = mergeMessages(msgData.data, messages.value)
     total.value = msgData.total
 
-    await markRead(chatId).catch(() => {})
-    // Dismiss toasts for this chat and mark notifications read
-    notifStore.items
-      .filter((n) => n.entityId === chatId && !n.isRead)
-      .forEach((n) => notifStore.markRead(n.id))
-    joinChat(chatId)
-
-    unsubMessageCreated = onMessageCreated((msg) => {
-      if (msg.chatId !== chatId) return
-
-      // Own message: try to replace the optimistic placeholder (tmp-*) first.
-      // This covers the case where the socket event arrives before the REST response.
-      if (msg.senderId === currentUserId.value) {
-        const tmpIdx = messages.value.findIndex((m) => m.id.startsWith('tmp-'))
-        if (tmpIdx !== -1) {
-          messages.value[tmpIdx] = msg
-          scrollToBottom()
-          return
-        }
-      }
-
-      // Someone else's message — or our message when no optimistic slot exists
-      const alreadyExists = messages.value.some((m) => m.id === msg.id)
-      if (!alreadyExists) {
-        messages.value.push(msg)
-        scrollToBottom()
-      }
-      markRead(chatId).catch(() => {})
-    })
-
-    unsubMessageRead = onMessageRead((data) => {
-      if (data.chatId === chatId) {
-        messages.value = messages.value.map((m) => ({
-          ...m,
-          isRead: m.senderId === currentUserId.value ? true : m.isRead,
-        }))
-      }
-    })
+    await markCurrentChatRead().catch(() => {})
 
     loadingChat.value = false
     await nextTick()
@@ -107,16 +108,69 @@ onBeforeUnmount(() => {
   leaveChat(chatId)
   unsubMessageCreated?.()
   unsubMessageRead?.()
+  unsubChatUpdated?.()
 })
+
+function mergeMessages(...groups: ChatMessage[][]): ChatMessage[] {
+  const merged = new Map<string, ChatMessage>()
+  for (const group of groups) {
+    for (const message of group) merged.set(message.id, message)
+  }
+  return [...merged.values()].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  )
+}
+
+function upsertMessage(incoming: ChatMessage) {
+  const index = messages.value.findIndex((message) => message.id === incoming.id)
+  if (index === -1) messages.value = mergeMessages(messages.value, [incoming])
+  else messages.value[index] = incoming
+}
+
+function reconcileOwnMessage(incoming: ChatMessage, optimisticId = pendingMessageId) {
+  const existingIndex = messages.value.findIndex((message) => message.id === incoming.id)
+  const optimisticIndex = optimisticId
+    ? messages.value.findIndex((message) => message.id === optimisticId)
+    : -1
+  const matchingOptimisticIndex =
+    optimisticIndex !== -1 && messages.value[optimisticIndex].message === incoming.message
+      ? optimisticIndex
+      : -1
+
+  if (existingIndex !== -1) {
+    messages.value[existingIndex] = incoming
+    if (matchingOptimisticIndex !== -1 && matchingOptimisticIndex !== existingIndex) {
+      messages.value.splice(matchingOptimisticIndex, 1)
+    }
+  } else if (matchingOptimisticIndex !== -1) {
+    messages.value[matchingOptimisticIndex] = incoming
+  } else {
+    upsertMessage(incoming)
+  }
+
+  if (optimisticId === pendingMessageId) pendingMessageId = null
+}
+
+async function markCurrentChatRead() {
+  notifStore.markChatReadLocal(chatId)
+  await markRead(chatId)
+}
 
 async function loadMore() {
   if (loadingMore.value) return
   const nextPage = page.value + 1
   loadingMore.value = true
   try {
+    const previousHeight = messagesEl.value?.scrollHeight ?? 0
+    const previousTop = messagesEl.value?.scrollTop ?? 0
     const data = await getMessages(chatId, nextPage)
-    messages.value = [...data.data, ...messages.value]
+    messages.value = mergeMessages(data.data, messages.value)
     page.value = nextPage
+    await nextTick()
+    if (messagesEl.value) {
+      messagesEl.value.scrollTop =
+        previousTop + (messagesEl.value.scrollHeight - previousHeight)
+    }
   } finally {
     loadingMore.value = false
   }
@@ -138,16 +192,18 @@ async function handleSend() {
 
   messageText.value = ''
   messages.value.push(optimistic)
+  pendingMessageId = optimistic.id
   scrollToBottom()
   sending.value = true
 
   try {
     const real = await sendMessage(chatId, text)
-    const idx = messages.value.findIndex((m) => m.id === optimistic.id)
-    if (idx !== -1) messages.value[idx] = real
+    reconcileOwnMessage(real, optimistic.id)
   } catch {
-    messages.value = messages.value.filter((m) => m.id !== optimistic.id)
-    messageText.value = text
+    const stillOptimistic = messages.value.some((message) => message.id === optimistic.id)
+    messages.value = messages.value.filter((message) => message.id !== optimistic.id)
+    if (stillOptimistic) messageText.value = text
+    if (pendingMessageId === optimistic.id) pendingMessageId = null
   } finally {
     sending.value = false
   }
@@ -161,7 +217,6 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 function scrollToBottom() {
-  console.log('scrolling to bottom')
   nextTick(() => {
     if (messagesEl.value) {
       messagesEl.value.scrollTop = messagesEl.value.scrollHeight

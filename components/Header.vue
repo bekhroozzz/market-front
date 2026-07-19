@@ -153,10 +153,10 @@ async function submitSearch() {
               d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
           <span
-            v-if="notifStore.unreadCount > 0"
+            v-if="notifStore.chatUnreadCount > 0"
             class="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-error text-white text-[10px] font-bold leading-none"
           >
-            {{ notifStore.unreadCount > 9 ? '9+' : notifStore.unreadCount }}
+            {{ notifStore.chatUnreadCount > 9 ? '9+' : notifStore.chatUnreadCount }}
           </span>
         </NuxtLink>
 
@@ -180,7 +180,7 @@ async function submitSearch() {
             <li>
               <NuxtLink to="/profile/chats" class="justify-between">
                 Чаты
-                <span v-if="notifStore.unreadCount > 0" class="badge badge-error">{{ notifStore.unreadCount }}</span>
+                <span v-if="notifStore.chatUnreadCount > 0" class="badge badge-error">{{ notifStore.chatUnreadCount }}</span>
               </NuxtLink>
             </li>
             <li>

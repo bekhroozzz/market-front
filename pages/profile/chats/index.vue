@@ -24,45 +24,60 @@ const currentUserId = computed<number | null>(() => {
 })
 
 const { listChats } = useChat()
-const { onChatCreated, onMessageRead } = useChatSocket()
+const { onChatCreated, onChatUpdated, onMessageRead } = useChatSocket()
 
 const chats = ref<Chat[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
 let unsubChatCreated: (() => void) | null = null
+let unsubChatUpdated: (() => void) | null = null
 let unsubMessageRead: (() => void) | null = null
 
 onMounted(async () => {
+  unsubChatCreated = onChatCreated(upsertChat)
+  unsubChatUpdated = onChatUpdated(upsertChat)
+  unsubMessageRead = onMessageRead((data) => {
+    if (data.readerId !== currentUserId.value) return
+    const existing = chats.value.find((item) => item.id === data.chatId)
+    if (!existing) return
+    if (currentUserId.value === existing.buyerId) existing.unreadForBuyer = 0
+    if (currentUserId.value === existing.sellerId) existing.unreadForSeller = 0
+  })
+
   try {
-    chats.value = await listChats()
+    const fetchedChats = await listChats()
+    const liveChats = [...chats.value]
+    chats.value = fetchedChats
+    for (const liveChat of liveChats) upsertChat(liveChat)
+    sortChats()
   } catch (e: any) {
     error.value = 'Не удалось загрузить чаты'
   } finally {
     loading.value = false
   }
-
-  unsubChatCreated = onChatCreated((chat) => {
-    if (!chats.value.find((c) => c.id === chat.id)) {
-      chats.value.unshift(chat)
-    }
-  })
-
-  unsubMessageRead = onMessageRead((data) => {
-    const chat = chats.value.find((c) => c.id === data.chatId)
-    if (!chat) return
-    if (currentUserId.value === chat.buyerId) {
-      chat.unreadForBuyer = 0
-    } else if (currentUserId.value === chat.sellerId) {
-      chat.unreadForSeller = 0
-    }
-  })
 })
 
 onBeforeUnmount(() => {
   unsubChatCreated?.()
+  unsubChatUpdated?.()
   unsubMessageRead?.()
 })
+
+function sortChats() {
+  chats.value.sort((a, b) => {
+    const aTime = new Date(a.lastMessageAt ?? a.createdAt).getTime()
+    const bTime = new Date(b.lastMessageAt ?? b.createdAt).getTime()
+    return bTime - aTime
+  })
+}
+
+function upsertChat(incoming: Chat) {
+  const index = chats.value.findIndex((item) => item.id === incoming.id)
+  if (index === -1) chats.value.push(incoming)
+  else chats.value[index] = incoming
+  sortChats()
+}
 
 function myUnread(chat: Chat): number {
   if (currentUserId.value === chat.buyerId) return chat.unreadForBuyer

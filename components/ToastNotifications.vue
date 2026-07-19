@@ -4,10 +4,15 @@ import { useNotificationStore } from '~/stores/notification'
 const store = useNotificationStore()
 const router = useRouter()
 
-function handleClick(n: { id: string; type: string; entityId: string | null }) {
-  store.dismissToast(n.id)
+async function handleClick(n: { id: string; type: string; entityId: string | null }) {
+  const markRead = store.markRead(n.id).catch(() => {})
   if (n.type === 'new_message' && n.entityId) {
-    router.push(`/profile/chats/${n.entityId}`)
+    await Promise.all([
+      markRead,
+      router.push(`/profile/chats/${n.entityId}`),
+    ])
+  } else {
+    await markRead
   }
 }
 </script>
