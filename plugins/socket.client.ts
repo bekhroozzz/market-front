@@ -1,55 +1,50 @@
-import { io, type Socket } from 'socket.io-client'
 import { useToken, useLogged } from '~/composables/states'
 import { useNotificationStore } from '~/stores/notification'
-
-let socket: Socket | null = null
+import type { FrontNotification } from '~/stores/notification'
+import {
+  configureChatSocket,
+  connectChatSocket,
+  disconnectChatSocket,
+  onChatSocketEvent,
+  updateChatSocketToken,
+} from '~/utils/chat-socket.client'
 
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig()
   const token = useToken()
   const logged = useLogged()
+  const route = useRoute()
+  const store = useNotificationStore()
+  const baseUrl = config.public.BASE_API_URL as string | undefined
 
-  function connect() {
-    if (!token.value || socket?.connected) return
-    const baseUrl = (config.public.BASE_API_URL as string || 'http://localhost:4000')
-      .replace(/\/api\/?$/, '')
+  configureChatSocket(baseUrl)
 
-    socket = io(`${baseUrl}/ws`, {
-      auth: { token: token.value },
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 2000,
-    })
+  onChatSocketEvent<FrontNotification>('notification.created', (notification) => {
+    const activeChatId =
+      route.path.startsWith('/profile/chats/') && route.params.id
+        ? String(route.params.id)
+        : null
 
-    socket.on('notification.created', (n) => {
-      const store = useNotificationStore()
-      store.push(n)
-    })
+    if (notification.type === 'new_message' && notification.entityId === activeChatId) {
+      store.push({ ...notification, isRead: true }, false)
+      void store.markRead(notification.id).catch(() => {})
+      return
+    }
 
-    // NOTE: message.created is NOT listened here to avoid duplicate delivery.
-    // The chat page uses its own socket (chat.ts composable) which joins the
-    // chat room and handles messages directly. Toasts come via notification.created.
-  }
+    store.push(notification)
+  })
 
-  function disconnect() {
-    socket?.disconnect()
-    socket = null
-  }
-
-  // Connect on login, disconnect on logout
-  watch(logged, (isLogged) => {
-    if (isLogged) {
-      connect()
+  watch([logged, token], ([isLogged, accessToken], previous) => {
+    if (isLogged && accessToken) {
+      if (previous?.[1] && previous[1] !== accessToken) {
+        updateChatSocketToken(accessToken, baseUrl)
+      } else {
+        connectChatSocket(accessToken, baseUrl)
+      }
+      void store.hydrate().catch(() => {})
     } else {
-      disconnect()
+      disconnectChatSocket()
+      store.clear()
     }
   }, { immediate: true })
-
-  // Also reconnect if token refreshes while already logged in
-  watch(token, (newToken) => {
-    if (newToken && logged.value && !socket?.connected) {
-      connect()
-    }
-  })
 })

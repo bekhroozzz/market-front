@@ -1,5 +1,10 @@
-import { io, type Socket } from 'socket.io-client'
-import { useToken } from '~/composables/states'
+import {
+  configureChatSocket,
+  disconnectChatSocket,
+  joinChatRoom,
+  leaveChatRoom,
+  onChatSocketEvent,
+} from '~/utils/chat-socket.client'
 
 export interface ChatUser {
   id: number
@@ -46,23 +51,10 @@ export interface ChatMessage {
   createdAt: string
 }
 
-let socket: Socket | null = null
-
-function getSocket(): Socket {
-  const config = useRuntimeConfig()
-  const token = useToken()
-
-  if (!socket || !socket.connected) {
-    const baseUrl = config.public.BASE_API_URL || 'http://localhost:4000'
-    socket = io(`${baseUrl}/ws`, {
-      auth: { token: token.value ?? '' },
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 2000,
-    })
-  }
-  return socket
+export interface MessageReadEvent {
+  chatId: string
+  readerId: number
+  readAt: string
 }
 
 export function useChat() {
@@ -96,36 +88,44 @@ export function useChat() {
 }
 
 export function useChatSocket() {
+  const config = useRuntimeConfig()
+  configureChatSocket(config.public.BASE_API_URL as string | undefined)
+
   const onMessageCreated = (cb: (msg: ChatMessage) => void): (() => void) => {
-    const s = getSocket()
-    s.on('message.created', cb)
-    return () => s.off('message.created', cb)
+    return onChatSocketEvent('message.created', cb)
   }
 
   const onChatCreated = (cb: (chat: Chat) => void): (() => void) => {
-    const s = getSocket()
-    s.on('chat.created', cb)
-    return () => s.off('chat.created', cb)
+    return onChatSocketEvent('chat.created', cb)
   }
 
-  const onMessageRead = (cb: (data: { chatId: string }) => void): (() => void) => {
-    const s = getSocket()
-    s.on('message.read', cb)
-    return () => s.off('message.read', cb)
+  const onChatUpdated = (cb: (chat: Chat) => void): (() => void) => {
+    return onChatSocketEvent('chat.updated', cb)
+  }
+
+  const onMessageRead = (cb: (data: MessageReadEvent) => void): (() => void) => {
+    return onChatSocketEvent('message.read', cb)
   }
 
   const joinChat = (chatId: string) => {
-    getSocket().emit('chat.join', { chatId })
+    joinChatRoom(chatId)
   }
 
   const leaveChat = (chatId: string) => {
-    getSocket().emit('chat.leave', { chatId })
+    leaveChatRoom(chatId)
   }
 
   const disconnect = () => {
-    socket?.disconnect()
-    socket = null
+    disconnectChatSocket()
   }
 
-  return { onMessageCreated, onChatCreated, onMessageRead, joinChat, leaveChat, disconnect }
+  return {
+    onMessageCreated,
+    onChatCreated,
+    onChatUpdated,
+    onMessageRead,
+    joinChat,
+    leaveChat,
+    disconnect,
+  }
 }
