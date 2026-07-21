@@ -73,3 +73,21 @@ bun run preview
 ```
 
 Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+
+## Deploy with Dokploy
+
+Create an **Application** in Dokploy and connect this repository:
+
+1. Set the build type to **Dockerfile** and the Dockerfile path to `Dockerfile`.
+2. Set the container port to `3000`.
+3. Add the runtime environment variable:
+
+   ```env
+   NUXT_PUBLIC_BASE_API_URL=https://api.locafun.uz
+   ```
+
+4. Add the domain `locafun.uz`, enable HTTPS, and redirect HTTP to HTTPS.
+5. Deploy the application.
+
+The API must allow `https://locafun.uz` in its CORS configuration and support
+WebSocket upgrades for chat connections.
