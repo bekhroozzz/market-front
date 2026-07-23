@@ -6,8 +6,15 @@ import {useRefreshToken, useSetTokens} from '~/composables/refresh-token';
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig()
 
+  // On the server, prefer the internal API URL (no public TLS/proxy hop).
+  // In the browser, always use the public URL.
+  const baseURL =
+    import.meta.server && config.apiInternalUrl
+      ? config.apiInternalUrl
+      : config.public.BASE_API_URL
+
   const api = $fetch.create({
-    baseURL: config.public.BASE_API_URL,
+    baseURL,
     headers: {
       Accept: 'application/json',
     },

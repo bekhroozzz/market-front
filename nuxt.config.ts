@@ -67,6 +67,11 @@ export default defineNuxtConfig({
     },
   },
   runtimeConfig: {
+    // Server-only. When set, SSR requests hit the API over the internal Docker
+    // network (e.g. http://market-api:4000) instead of the public domain,
+    // avoiding an extra TLS + reverse-proxy round-trip on every render.
+    // Falls back to the public URL when empty.
+    apiInternalUrl: process.env.NUXT_API_INTERNAL_URL || '',
     public: {
       BASE_API_URL: process.env.NUXT_PUBLIC_BASE_API_URL,
     },
