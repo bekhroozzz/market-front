@@ -6,6 +6,7 @@ import {
   type SearchProductsResponse,
 } from '~/composables/product'
 import { breakpointsTailwind } from '@vueuse/core'
+import { DEFAULT_DESCRIPTION, DEFAULT_TITLE } from '~/composables/seo'
 
 interface HomeFilters {
   city?: string
@@ -24,6 +25,14 @@ interface ProductCardViewModel {
 
 const { lg, sm } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
 const route = useRoute()
+
+useAppSeo({
+  title: DEFAULT_TITLE,
+  description: DEFAULT_DESCRIPTION,
+  canonical: '/',
+  // Search result URLs must not create duplicate indexed pages
+  noindex: () => Boolean(route.query.q),
+})
 
 const filters = ref<HomeFilters>({})
 const isSearchFallback = ref(false)
@@ -193,6 +202,9 @@ function handleFiltersApply(payload: FiltersApplyPayload) {
 
 <template>
   <div class="my-10 flex flex-col">
+    <h1 class="sr-only">
+      LocaFun — места для отдыха и развлечений
+    </h1>
     <BookingFilter class="mb-10 mx-auto px-4 lg:w-1/2" @apply="handleFiltersApply" />
 
     <!-- Search results header -->

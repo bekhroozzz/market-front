@@ -6,6 +6,8 @@ import { useNotificationStore } from '~/stores/notification'
 
 definePageMeta({ middleware: [] })
 
+useAppSeo({ title: 'Чат | LocaFun', noindex: true })
+
 const logged = useLogged()
 if (!logged.value) {
   await navigateTo('/')

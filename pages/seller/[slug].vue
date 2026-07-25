@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { getSellerProfile, type SellerPublicProfile } from '~/composables/seller'
+import { truncateMeta } from '~/composables/seo'
+import { buildLocalBusinessSchema } from '~/utils/schema'
 
 const route = useRoute()
 const sellerId = Number(route.params.slug)
@@ -25,12 +27,30 @@ async function handlePageChange(page: number) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-useSeoMeta({
-  title: () => profile.value?.companyName ?? 'Профиль продавца',
+const sellerTitle = computed(
+  () => profile.value?.companyName?.trim() || `Продавец #${sellerId}`,
+)
+
+useAppSeo({
+  title: () => `${sellerTitle.value} | LocaFun`,
   description: () =>
-    profile.value?.aboutCompany?.slice(0, 160) ?? 'Публичный профиль продавца на маркетплейсе',
-  ogTitle: () => profile.value?.companyName ?? 'Профиль продавца',
-  ogDescription: () => profile.value?.aboutCompany?.slice(0, 160) ?? '',
+    truncateMeta(profile.value?.aboutCompany)
+    || `${sellerTitle.value} — профиль продавца на LocaFun`,
+  image: () => profile.value?.gallery?.[0]?.url,
+  canonical: () => `/seller/${sellerId}`,
+  type: 'profile',
+  noindex: () => currentPage.value > 1,
+  jsonLd: () =>
+    profile.value
+      ? buildLocalBusinessSchema({
+          name: sellerTitle.value,
+          description: profile.value.aboutCompany,
+          path: `/seller/${sellerId}`,
+          image: profile.value.gallery?.[0]?.url,
+          telephone: profile.value.phones?.[0],
+          address: profile.value.branches?.[0]?.address,
+        })
+      : null,
 })
 </script>
 

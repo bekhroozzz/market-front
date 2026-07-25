@@ -11,6 +11,8 @@ import { useLogged } from '~/composables/states'
 
 definePageMeta({ middleware: [] })
 
+useAppSeo({ title: 'Бронирование | LocaFun', noindex: true })
+
 const logged = useLogged()
 if (!logged.value) {
   await navigateTo('/')

@@ -14,6 +14,13 @@ const route = useRoute()
 const router = useRouter()
 const slug = route.params.slug as string
 
+useAppSeo({
+  title: 'Бронирование | LocaFun',
+  description: 'Оформление бронирования на LocaFun',
+  canonical: () => `/booking/${slug}`,
+  noindex: true,
+})
+
 const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 async function getOfferBySlugOrId(slugOrId: string) {

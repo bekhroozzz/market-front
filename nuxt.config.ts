@@ -6,20 +6,33 @@ export default defineNuxtConfig({
   app: {
     head: {
       charset: 'utf-8',
-      viewport: 'width=device-width, initial-scale=1, user-scalable=no',
+      viewport: 'width=device-width, initial-scale=1',
       title: 'LocaFun — найди лучшие места для отдыха и развлечений рядом',
+      titleTemplate: '%s',
       meta: [
         {
           name: 'description',
           content:
             'Платформа LocaFun поможет найти бассейны, рестораны, компьютерные клубы, боулинги и другие развлечения рядом с вами. Открой для себя активный отдых в своём городе!',
         },
+        { name: 'theme-color', content: '#0F766E' },
+        { name: 'format-detection', content: 'telephone=no' },
+        { property: 'og:type', content: 'website' },
+        { property: 'og:site_name', content: 'LocaFun' },
+        { property: 'og:locale', content: 'ru_UZ' },
+        { name: 'twitter:card', content: 'summary_large_image' },
+        {
+          name: 'googlebot',
+          content: 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
+        },
       ],
       htmlAttrs: {
         lang: 'ru',
       },
-      link: [],
-      script: [],
+      link: [
+        { rel: 'icon', href: '/favicon.ico', sizes: 'any' },
+        { rel: 'apple-touch-icon', href: '/favicon.ico' },
+      ],
     },
   },
   nitro: {
@@ -74,6 +87,8 @@ export default defineNuxtConfig({
     apiInternalUrl: process.env.NUXT_API_INTERNAL_URL || '',
     public: {
       BASE_API_URL: process.env.NUXT_PUBLIC_BASE_API_URL,
+      // Canonical / Open Graph base. Override in Dokploy if the public domain changes.
+      siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://locafun.uz',
     },
   },
   build: {

@@ -3,6 +3,11 @@ import { useLogged } from '~/composables/states'
 
 definePageMeta({ middleware: [] })
 
+useAppSeo({
+  title: 'Личный кабинет | LocaFun',
+  noindex: true,
+})
+
 const logged = useLogged()
 if (!logged.value) {
   await navigateTo('/')

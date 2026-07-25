@@ -10,6 +10,8 @@ import {
   type CatalogFilters,
   type CategoryNode,
 } from '~/composables/catalog'
+import { truncateMeta } from '~/composables/seo'
+import { buildBreadcrumbSchema, buildCollectionPageSchema } from '~/utils/schema'
 
 interface ProductCardViewModel {
   url: string
@@ -129,6 +131,48 @@ async function fetchProducts(append = false) {
 await fetchProducts()
 
 const products = computed(() => accumulatedProducts.value)
+
+const categoryDescription = computed(() =>
+  currentCategory.value?.description
+  || `Смотрите предложения в категории «${pageTitle.value}» на LocaFun — бронирование мест для отдыха и развлечений.`,
+)
+
+const catalogCanonical = computed(() =>
+  categoryPath.value ? `/catalog/${categoryPath.value}` : '/catalog',
+)
+
+const hasActiveFilters = computed(() => {
+  const q = route.query
+  return Boolean(
+    searchFilters.value.minPrice != null
+    || searchFilters.value.maxPrice != null
+    || searchFilters.value.inStock
+    || q.minPrice
+    || q.maxPrice
+    || q.inStock
+    || q.page
+    || q.sort
+    || q.q,
+  )
+})
+
+useAppSeo({
+  title: () => `${pageTitle.value} — каталог | LocaFun`,
+  description: () => truncateMeta(categoryDescription.value),
+  canonical: () => catalogCanonical.value,
+  // Filtered/query views should not create duplicate index entries
+  noindex: () => hasActiveFilters.value,
+  jsonLd: () => [
+    buildCollectionPageSchema({
+      name: pageTitle.value,
+      description: categoryDescription.value,
+      path: catalogCanonical.value,
+    }),
+    buildBreadcrumbSchema(
+      breadcrumbs.value.map(cat => ({ name: cat.name, path: categoryHref(cat) })),
+    ),
+  ],
+})
 
 interface FilterPayload {
   city?: string

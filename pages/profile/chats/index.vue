@@ -5,6 +5,8 @@ import { jwtDecode, type JwtPayload } from 'jwt-decode'
 
 definePageMeta({ middleware: [] })
 
+useAppSeo({ title: 'Чаты | LocaFun', noindex: true })
+
 const logged = useLogged()
 if (!logged.value) {
   await navigateTo('/')

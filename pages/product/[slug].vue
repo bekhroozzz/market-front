@@ -8,6 +8,8 @@ import {
   categoryHref,
   type CategoryNode,
 } from '~/composables/catalog'
+import { truncateMeta } from '~/composables/seo'
+import { buildBreadcrumbSchema, buildProductSchema } from '~/utils/schema'
 
 interface ProductViewModel {
   name: string
@@ -59,6 +61,15 @@ const { data: offer } = await useAsyncData(`offer-${routeSlug}`, () => getOfferB
 
 if (!offer.value) throw createError({ statusCode: 404, statusMessage: 'Товар не найден' })
 
+// Consolidate UUID URLs onto the slug canonical
+if (
+  uuidV4Regex.test(routeSlug)
+  && offer.value.slug
+  && offer.value.slug !== routeSlug
+) {
+  await navigateTo(`/product/${offer.value.slug}`, { redirectCode: 301, replace: true })
+}
+
 const productData = ref<ProductViewModel>(mapOfferToViewModel(offer.value))
 
 const breadcrumbs = computed(() => {
@@ -69,6 +80,48 @@ const breadcrumbs = computed(() => {
     ...categoryPath.map(cat => ({ label: cat.name, to: categoryHref(cat) })),
     { label: productData.value.name },
   ]
+})
+
+const canonicalPath = computed(() =>
+  `/product/${offer.value?.slug || offer.value?.id || routeSlug}`,
+)
+
+const seoJsonLd = computed(() => {
+  const categoryChain = offer.value?.category_id
+    ? buildCategoryChain(menuHeader.value as CategoryNode[], offer.value.category_id) ?? []
+    : []
+  const leafCategory = categoryChain[categoryChain.length - 1]
+
+  return [
+    buildProductSchema({
+      name: productData.value.name,
+      description: offer.value?.description || productData.value.description,
+      images: offer.value?.images?.filter(Boolean) || productData.value.images.map(i => i.src),
+      slug: offer.value?.slug,
+      id: offer.value?.id,
+      price: productData.value.price,
+      oldPrice: productData.value.oldPrice,
+      inStock: offer.value?.inStock,
+      rating: productData.value.rating,
+      reviewCount: productData.value.reviewCount,
+      categoryName: leafCategory?.name,
+    }),
+    buildBreadcrumbSchema([
+      ...categoryChain.map(cat => ({ name: cat.name, path: categoryHref(cat) })),
+      { name: productData.value.name, path: canonicalPath.value },
+    ]),
+  ]
+})
+
+useAppSeo({
+  title: () => `${productData.value.name} | LocaFun`,
+  description: () =>
+    truncateMeta(offer.value?.description)
+    || `${productData.value.name} — бронирование и подробности на LocaFun`,
+  image: () => offer.value?.images?.[0] || productData.value.images[0]?.src,
+  canonical: () => canonicalPath.value,
+  type: 'product',
+  jsonLd: seoJsonLd,
 })
 
 const photoModal = useModal({
