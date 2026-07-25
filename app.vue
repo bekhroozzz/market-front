@@ -5,11 +5,16 @@ const menuStore = useMenuStore()
 const { menuHeader } = storeToRefs(menuStore)
 const refreshToken = useCookie('refreshToken')
 
-await useLazyAsyncData('category-menu', ()=> useApiGet('/api/category/get-all', {
-  onResponse({response}) {
-    menuHeader.value = response._data
+await useLazyAsyncData('category-menu', async () => {
+  try {
+    menuHeader.value = await getCatalogCategories()
+    return menuHeader.value
   }
-}))
+  catch {
+    menuHeader.value = []
+    return []
+  }
+})
 
 if (refreshToken.value) {
   const { data } = await useAsyncData(() => useRefreshToken())

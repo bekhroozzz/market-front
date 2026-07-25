@@ -3,12 +3,11 @@ import Breadcrumbs from '~/components/Breadcrumbs.vue'
 import { useModal, useModalSlot } from 'vue-final-modal'
 import { LazyModalTemplate, LazyProductPhotoFullScreen } from '#components'
 import { getProductById, getProductBySlug, type Offer } from '~/composables/product'
-
-interface Category {
-  id: string
-  name: string
-  children?: Category[]
-}
+import {
+  buildCategoryChain,
+  categoryHref,
+  type CategoryNode,
+} from '~/composables/catalog'
 
 interface ProductViewModel {
   name: string
@@ -56,22 +55,6 @@ async function getOfferBySlugOrId(slugOrId: string): Promise<Offer> {
 const menuStore = useMenuStore()
 const { menuHeader } = storeToRefs(menuStore)
 
-function buildCategoryPath(
-  categories: Category[],
-  targetId: string,
-  path: Category[] = [],
-): Category[] | null {
-  for (const cat of categories) {
-    const current = [...path, cat]
-    if (cat.id === targetId) return current
-    if (cat.children?.length) {
-      const found = buildCategoryPath(cat.children, targetId, current)
-      if (found) return found
-    }
-  }
-  return null
-}
-
 const { data: offer } = await useAsyncData(`offer-${routeSlug}`, () => getOfferBySlugOrId(routeSlug))
 
 if (!offer.value) throw createError({ statusCode: 404, statusMessage: 'Товар не найден' })
@@ -80,10 +63,10 @@ const productData = ref<ProductViewModel>(mapOfferToViewModel(offer.value))
 
 const breadcrumbs = computed(() => {
   const categoryPath = offer.value?.category_id
-    ? buildCategoryPath(menuHeader.value as Category[], offer.value.category_id) ?? []
+    ? buildCategoryChain(menuHeader.value as CategoryNode[], offer.value.category_id) ?? []
     : []
   return [
-    ...categoryPath.map((cat) => ({ label: cat.name, to: `/catalog/${cat.id}` })),
+    ...categoryPath.map(cat => ({ label: cat.name, to: categoryHref(cat) })),
     { label: productData.value.name },
   ]
 })

@@ -41,20 +41,18 @@ function closeMenu() {
   isOpen.value = false
 }
 
-const menuModal =   useModal(
-    {
-      component: LazyMenuModalCatalog,
-      slots: {
-        default: useModalSlot({
-          component: LazyMenuCatalog,
-          attrs:{
-            menu: menuHeader.value,
-            onNavigate: closeMenu,
-          },
-        }),
+const menuModal = useModal({
+  component: LazyMenuModalCatalog,
+  slots: {
+    default: useModalSlot({
+      component: LazyMenuCatalog,
+      attrs: {
+        menu: [],
+        onNavigate: closeMenu,
       },
-    })
-
+    }),
+  },
+})
 
 onClickOutside(menuRef, () => {
   if (isOpen.value)
@@ -67,10 +65,23 @@ watch(() => route.path, () => {
 })
 
 function toggleMenu(opened: boolean) {
-  if(opened)
+  if (opened) {
+    menuModal.patchOptions({
+      slots: {
+        default: useModalSlot({
+          component: LazyMenuCatalog,
+          attrs: {
+            menu: menuHeader.value,
+            onNavigate: closeMenu,
+          },
+        }),
+      },
+    })
     menuModal.open()
-  else
+  }
+  else {
     menuModal.close()
+  }
 }
 
 function normalizeQuerySearch(value: unknown): string {

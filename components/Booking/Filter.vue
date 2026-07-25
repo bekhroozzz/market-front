@@ -2,6 +2,7 @@
 import VueDatePicker from '@vuepic/vue-datepicker';
 import SelectBase from '~/components/SelectBase.vue';
 import {breakpointsTailwind} from '@vueuse/core';
+import { flattenCategories } from '~/composables/catalog'
 
 interface FilterPayload {
   city?: string
@@ -27,16 +28,12 @@ const maxPriceInput = ref('')
 const inStockOnly = ref(false)
 
 const categorySelector = computed(() => {
-  return menuHeader.value.flatMap((category: any) => {
-    const children = Array.isArray(category?.children) ? category.children : []
-
-    return [
-      ...(category?.id && category?.name ? [{ name: category.name, value: category.id }] : []),
-      ...children
-        .filter((child: any) => child?.id && child?.name)
-        .map((child: any) => ({ name: `${category.name} / ${child.name}`, value: child.id })),
-    ]
-  })
+  return flattenCategories(menuHeader.value)
+    .filter(cat => cat.path || cat.slug)
+    .map(cat => ({
+      name: cat.label,
+      value: cat.path || cat.slug,
+    }))
 })
 
 const selectedCity = ref<{ name: string; value: string } | null>(null);

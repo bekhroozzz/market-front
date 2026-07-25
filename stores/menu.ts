@@ -1,5 +1,7 @@
-export const useMenuStore = defineStore('menu-store', () => {
-  const menuHeader  = ref([])
+import type { CategoryNode } from '~/composables/catalog'
 
-  return {menuHeader}
+export const useMenuStore = defineStore('menu-store', () => {
+  const menuHeader = ref<CategoryNode[]>([])
+
+  return { menuHeader }
 })

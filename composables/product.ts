@@ -74,6 +74,20 @@ export interface SearchProductsParams {
   attributes?: Record<string, string | string[]>
 }
 
+export interface CategoryFacet {
+  id: string
+  slug?: string | null
+  path?: string | null
+  name?: string | null
+  count: number
+}
+
+export interface SearchFacets {
+  categories?: CategoryFacet[]
+  brands?: { id: string; count: number }[]
+  priceStats?: { min: number | null; max: number | null; avg?: number | null }
+}
+
 export interface SearchProductsResponse {
   total: number
   page: number
@@ -102,6 +116,8 @@ export interface SearchProductsResponse {
       description?: string[]
     }
   }[]
+  facets?: SearchFacets
+  took?: number
 }
 
 export interface PaginatedOffersResponse {
