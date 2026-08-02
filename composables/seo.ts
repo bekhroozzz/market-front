@@ -23,9 +23,25 @@ function toValueLoose<T>(input: MaybeRefOrGetter<T> | undefined): T | undefined 
   return toValue(input)
 }
 
-export function useSiteUrl(): string {
-  const config = useRuntimeConfig()
-  const fromConfig = String(config.public.siteUrl || '').replace(/\/+$/, '')
+function readPublicConfig(key: 'siteUrl' | 'BASE_API_URL'): string {
+  // Prefer live Nuxt context, but never call useRuntimeConfig() — unhead may
+  // re-run resolvers after the request instance is gone ("instance unavailable").
+  const nuxtApp = tryUseNuxtApp()
+  const fromApp = String(nuxtApp?.$config?.public?.[key] || '').trim()
+  if (fromApp) return fromApp
+
+  if (import.meta.server) {
+    const envKey = key === 'siteUrl' ? 'NUXT_PUBLIC_SITE_URL' : 'NUXT_PUBLIC_BASE_API_URL'
+    const fromEnv = String(process.env?.[envKey] || '').trim()
+    if (fromEnv) return fromEnv
+  }
+
+  return ''
+}
+
+/** Safe outside setup (e.g. unhead resolvers / computed re-runs). */
+function resolveSiteUrl(): string {
+  const fromConfig = readPublicConfig('siteUrl').replace(/\/+$/, '')
   if (fromConfig) return fromConfig
 
   if (import.meta.client && globalThis.location?.origin)
@@ -34,24 +50,38 @@ export function useSiteUrl(): string {
   return 'https://locafun.uz'
 }
 
-export function useMediaBaseUrl(): string {
-  const config = useRuntimeConfig()
-  const api = String(config.public.BASE_API_URL || '').replace(/\/+$/, '')
-  if (!api) return useSiteUrl()
+/** Safe outside setup (e.g. unhead resolvers / computed re-runs). */
+function resolveMediaBaseUrl(): string {
+  const api = readPublicConfig('BASE_API_URL').replace(/\/+$/, '')
+  if (!api) return resolveSiteUrl()
   return api.replace(/\/api\/?$/, '')
 }
 
-/** Build absolute site URL from a path. */
-export function absoluteUrl(path = '/'): string {
-  const site = useSiteUrl()
+export function useSiteUrl(): string {
+  return resolveSiteUrl()
+}
+
+export function useMediaBaseUrl(): string {
+  return resolveMediaBaseUrl()
+}
+
+/** Build absolute site URL from a path. Safe outside Nuxt setup. */
+export function absoluteUrl(path = '/', siteUrl?: string): string {
+  const site = (siteUrl ?? resolveSiteUrl()).replace(/\/+$/, '')
   if (!path || path === '/') return `${site}/`
   if (/^https?:\/\//i.test(path)) return path
   return `${site}${path.startsWith('/') ? path : `/${path}`}`
 }
 
-/** Resolve product/media/asset URLs to absolute http(s). */
-export function absoluteAssetUrl(src?: string | null): string {
-  if (!src) return absoluteUrl(DEFAULT_OG_IMAGE)
+/** Resolve product/media/asset URLs to absolute http(s). Safe outside Nuxt setup. */
+export function absoluteAssetUrl(
+  src?: string | null,
+  bases?: { siteUrl?: string, mediaBase?: string },
+): string {
+  const siteUrl = bases?.siteUrl ?? resolveSiteUrl()
+  const mediaBase = bases?.mediaBase ?? resolveMediaBaseUrl()
+
+  if (!src) return absoluteUrl(DEFAULT_OG_IMAGE, siteUrl)
   if (/^https?:\/\//i.test(src)) return src
   if (src.startsWith('//')) return `https:${src}`
 
@@ -62,12 +92,11 @@ export function absoluteAssetUrl(src?: string | null): string {
     || /^\/\d+\.(jpe?g|png|webp|gif)$/i.test(src)
     || /^\/og-default\.(jpe?g|png|webp)$/i.test(src)
   ) {
-    return absoluteUrl(src)
+    return absoluteUrl(src, siteUrl)
   }
 
   // Uploaded media from API (often "/uploads/...")
-  const mediaBase = useMediaBaseUrl()
-  return `${mediaBase}${src.startsWith('/') ? src : `/${src}`}`
+  return `${mediaBase.replace(/\/+$/, '')}${src.startsWith('/') ? src : `/${src}`}`
 }
 
 export function stripHtml(input?: string | null): string {
@@ -113,14 +142,17 @@ export function useJsonLd(schema: MaybeRefOrGetter<object | object[] | null | un
  */
 export function useAppSeo(options: AppSeoOptions = {}) {
   const route = useRoute()
+  // Capture once in setup — unhead may re-run computed getters outside Nuxt context
+  const siteUrl = resolveSiteUrl()
+  const mediaBase = resolveMediaBaseUrl()
 
   const resolved = computed(() => {
     const title = toValueLoose(options.title)?.trim() || DEFAULT_TITLE
     const description =
       truncateMeta(toValueLoose(options.description) || DEFAULT_DESCRIPTION) || DEFAULT_DESCRIPTION
-    const image = absoluteAssetUrl(toValueLoose(options.image) || DEFAULT_OG_IMAGE)
+    const image = absoluteAssetUrl(toValueLoose(options.image) || DEFAULT_OG_IMAGE, { siteUrl, mediaBase })
     const canonicalInput = toValueLoose(options.canonical)
-    const canonical = absoluteUrl(canonicalInput || route.path || '/')
+    const canonical = absoluteUrl(canonicalInput || route.path || '/', siteUrl)
     const type = toValueLoose(options.type) || 'website'
     const noindex = Boolean(toValueLoose(options.noindex))
     const robots = toValueLoose(options.robots) || (noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1')
