@@ -31,7 +31,7 @@ export interface CatalogResponse extends SearchProductsResponse {
   category: CatalogCategoryInfo | null
 }
 
-export type CatalogFilters = Omit<SearchProductsParams, 'q' | 'category'>
+export type CatalogFilters = Omit<SearchProductsParams, 'category'>
 
 /** Attach full `path` on every node from slug chain (if API omitted it). */
 export function withCategoryPaths(

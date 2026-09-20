@@ -10,7 +10,6 @@ export default defineEventHandler((event) => {
 Allow: /
 Disallow: /profile
 Disallow: /profile/
-Disallow: /cart
 Disallow: /booking/
 Disallow: /api/
 

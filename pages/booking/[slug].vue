@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import VueDatePicker from '@vuepic/vue-datepicker'
-import { breakpointsTailwind } from '@vueuse/core'
-import { getProductBySlug, getProductById } from '~/composables/product'
-import {
-  useBooking,
-  getClosedWeekDays,
-  getScheduleForDate,
-  type PaymentMethod,
-} from '~/composables/booking'
+import { useModal, useModalSlot } from 'vue-final-modal'
+import { LazyAuthSignup, LazyModalTemplate } from '#components'
+import { getProductBySlug, getProductById, type Offer } from '~/composables/product'
+import { findCategoryById } from '~/composables/catalog'
+import { useBooking, getScheduleForDate, type PaymentMethod } from '~/composables/booking'
+import { getFallbackOffer } from '~/composables/offer-fallback'
 import { useLogged } from '~/composables/states'
+import { addMinutesToTime, formatBookingChip, generateTimeSlots, isVenueOpenNow } from '~/utils/time-slots'
+import { formatPrice } from '~/utils/format-price'
 
 const route = useRoute()
-const router = useRouter()
-const slug = route.params.slug as string
+const slug = String(route.params.slug || '')
+const isLogged = useLogged()
+const chrome = useAppChrome()
+const { createBooking } = useBooking()
+const menuStore = useMenuStore()
+const { menuHeader } = storeToRefs(menuStore)
 
 useAppSeo({
   title: 'Бронирование | LocaFun',
@@ -23,351 +26,598 @@ useAppSeo({
 
 const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-async function getOfferBySlugOrId(slugOrId: string) {
-  if (uuidV4Regex.test(slugOrId)) return getProductById(slugOrId)
-  return getProductBySlug(slugOrId)
+async function getOfferBySlugOrId(slugOrId: string): Promise<Offer> {
+  try {
+    if (uuidV4Regex.test(slugOrId)) return await getProductById(slugOrId)
+    return await getProductBySlug(slugOrId)
+  }
+  catch (error) {
+    if (import.meta.dev) return getFallbackOffer()
+    throw error
+  }
 }
 
-const { lg } = useBreakpoints(breakpointsTailwind, { ssrWidth: 768 })
-const { createBooking } = useBooking()
-const logged = useLogged()
+const { data: offer, pending: isOfferLoading, error: offerLoadError } = await useAsyncData(
+  `booking-offer-${slug}`,
+  () => getOfferBySlugOrId(slug),
+)
 
-const offer = ref<Awaited<ReturnType<typeof getProductBySlug>> | null>(null)
-const isOfferLoading = ref(true)
-const offerError = ref('')
+const offerError = computed(() => {
+  if (offer.value) return ''
+  if (offerLoadError.value) return 'Предложение не найдено'
+  return ''
+})
 
-const date = ref<Date | null>(null)
-const time = ref<{ hours: number; minutes: number } | null>(null)
-const personsCount = ref(1)
+function parseQueryDate(): Date {
+  const raw = String(route.query.date || '')
+  if (raw && !Number.isNaN(Date.parse(raw)))
+    return new Date(`${raw}T00:00:00`)
+  return new Date()
+}
+
+const selectedDate = ref<Date>(parseQueryDate())
+const selectedTime = ref(String(route.query.time || ''))
+const personsCount = ref(Number(route.query.persons) > 0 ? Number(route.query.persons) : 2)
+const guestName = ref('')
 const phone = ref('')
 const comment = ref('')
 const paymentMethod = ref<PaymentMethod>('cash')
+const needShoes = ref(true)
+const needBumpers = ref(false)
+const showBreakdown = ref(false)
 
 const isSubmitting = ref(false)
 const submitError = ref('')
 const submitSuccess = ref(false)
 const createdBookingId = ref<string | null>(null)
 
-const paymentOptions = [
-  { name: 'Наличные', value: 'cash' },
-  { name: 'Банковская карта', value: 'card' },
-]
-
-onMounted(async () => {
-  try {
-    offer.value = await getOfferBySlugOrId(slug)
-  } catch {
-    offerError.value = 'Предложение не найдено'
-  } finally {
-    isOfferLoading.value = false
-  }
-})
-
-const disabledWeekDays = computed(() =>
-  getClosedWeekDays(offer.value?.workSchedule),
+const dateChips = computed(() =>
+  Array.from({ length: 10 }, (_, index) => {
+    const date = new Date()
+    date.setHours(0, 0, 0, 0)
+    date.setDate(date.getDate() + index)
+    const schedule = getScheduleForDate(offer.value?.workSchedule, date)
+    return {
+      date,
+      closed: Boolean(schedule?.isClosed),
+      ...formatBookingChip(date),
+    }
+  }),
 )
 
-const selectedDaySchedule = computed(() => {
-  if (!date.value || !offer.value?.workSchedule?.length) return null
-  return getScheduleForDate(offer.value.workSchedule, date.value)
+const slots = computed(() => generateTimeSlots(offer.value?.workSchedule, selectedDate.value))
+
+watch(slots, (value) => {
+  if (!value.includes(selectedTime.value))
+    selectedTime.value = value[0] || ''
+}, { immediate: true })
+
+const category = computed(() =>
+  offer.value?.category_id ? findCategoryById(menuHeader.value, offer.value.category_id) : null,
+)
+const categoryLabel = computed(() => category.value?.name || (offer.value?.id?.startsWith('fallback-') ? 'Боулинг' : ''))
+const isOpen = computed(() => isVenueOpenNow(offer.value?.workSchedule))
+const unitPrice = computed(() => offer.value?.prices?.[0]?.price ?? offer.value?.price ?? 0)
+const endTime = computed(() => selectedTime.value ? addMinutesToTime(selectedTime.value, 60) : '')
+const coverImage = computed(() => offer.value?.images?.find(Boolean) || '/og-default.jpg')
+const dateQuery = computed(() => {
+  const year = selectedDate.value.getFullYear()
+  const month = String(selectedDate.value.getMonth() + 1).padStart(2, '0')
+  const day = String(selectedDate.value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+})
+const dateLong = computed(() =>
+  selectedDate.value.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }),
+)
+const dateShort = computed(() =>
+  selectedDate.value.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' }),
+)
+const monthLabel = computed(() =>
+  selectedDate.value.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }),
+)
+const personsLabel = computed(() => {
+  const n = personsCount.value
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return `${n} человек`
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} человека`
+  return `${n} человек`
 })
 
-const timeHint = computed(() => {
-  const s = selectedDaySchedule.value
-  if (!s || s.isClosed) return null
-  if (!s.openTime || !s.closeTime) return null
-  return `Доступно с ${s.openTime} до ${s.closeTime}`
+const stepIndex = computed(() => {
+  if (submitSuccess.value) return 4
+  if (phone.value.trim().length >= 9) return 3
+  if (selectedDate.value && selectedTime.value) return 2
+  return 1
 })
 
-const coverImage = computed(() => {
-  const img = offer.value?.images?.[0]
-  if (!img) return null
-  if (img.startsWith('http')) return img
-  const config = useRuntimeConfig()
-  return `${config.public.BASE_API_URL?.replace('/api', '')}${img}`
+const offerBackHref = computed(() => `/product/${offer.value?.slug || slug}`)
+
+watch(offerBackHref, (href) => {
+  chrome.configure({
+    title: 'Бронирование',
+    backHref: href,
+  })
+}, { immediate: true })
+
+onUnmounted(() => chrome.reset())
+
+const authModal = useModal({
+  component: LazyModalTemplate,
+  attrs: {
+    variant: 'center',
+    hideClose: true,
+    containerWidth: '490px',
+  },
+  slots: {
+    default: useModalSlot({
+      component: LazyAuthSignup,
+      attrs: {
+        onClose() {
+          authModal.close()
+        },
+      },
+    }),
+  },
 })
 
-function formatDateStr(d: Date | null): string | null {
-  if (!d) return null
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+function pickDate(date: Date, closed?: boolean) {
+  if (closed) return
+  selectedDate.value = date
 }
 
-function formatTimeStr(t: { hours: number; minutes: number } | null): string | null {
-  if (!t) return null
-  return `${String(t.hours).padStart(2, '0')}:${String(t.minutes).padStart(2, '0')}`
+function buildComment() {
+  const extras = [
+    needShoes.value ? 'прокат обуви' : '',
+    needBumpers.value ? 'детские бортики' : '',
+  ].filter(Boolean)
+  return [
+    guestName.value.trim() ? `Имя: ${guestName.value.trim()}` : '',
+    comment.value.trim(),
+    extras.length ? extras.join(', ') : '',
+  ].filter(Boolean).join('. ')
 }
 
 async function handleSubmit() {
-  if (!logged.value) {
-    await router.push('/')
+  if (!isLogged.value) {
+    authModal.open()
     return
   }
   if (!offer.value) return
-  if (!date.value || !time.value) {
+  if (!selectedTime.value) {
     submitError.value = 'Выберите дату и время'
     return
   }
-
-  const dateStr = formatDateStr(date.value)!
-  const timeStr = formatTimeStr(time.value)!
+  if (!phone.value.trim()) {
+    submitError.value = 'Укажите номер телефона'
+    return
+  }
 
   submitError.value = ''
   isSubmitting.value = true
-
   try {
     const booking = await createBooking({
       offerId: offer.value.id,
-      date: dateStr,
-      time: timeStr,
+      date: dateQuery.value,
+      time: selectedTime.value,
       personsCount: personsCount.value,
-      phone: phone.value,
-      comment: comment.value || undefined,
+      phone: phone.value.trim(),
+      comment: buildComment() || undefined,
       paymentMethod: paymentMethod.value,
     })
     createdBookingId.value = booking.id
     submitSuccess.value = true
-  } catch (e: any) {
-    const msg = e?._data?.message
-    submitError.value = Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Ошибка при создании брони')
-  } finally {
+  }
+  catch (error: unknown) {
+    const payload = error as { _data?: { message?: string | string[] } }
+    const message = payload?._data?.message
+    submitError.value = Array.isArray(message) ? message.join(', ') : (message ?? 'Ошибка при создании брони')
+  }
+  finally {
     isSubmitting.value = false
   }
 }
 </script>
 
 <template>
-  <div class="flex flex-col container px-4 mx-auto py-10">
-    <div v-if="isOfferLoading" class="flex justify-center py-20">
-      <span class="loading loading-spinner loading-lg text-primary" />
-    </div>
-
-    <div v-else-if="offerError" class="alert alert-error max-w-md mx-auto">{{ offerError }}</div>
-
-    <template v-else-if="offer">
-      <!-- Success state -->
-      <div v-if="submitSuccess" class="max-w-md mx-auto text-center py-12 space-y-4">
-        <div class="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-          </svg>
-        </div>
-        <h2 class="text-2xl font-bold">Бронь создана!</h2>
-        <p class="text-base-content/60">
-          {{ offer.autoConfirmBooking
-            ? 'Ваша бронь автоматически подтверждена. Проверьте личный кабинет.'
-            : 'Ваша заявка отправлена. Ожидайте подтверждения от продавца.'
-          }}
-        </p>
-        <div class="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-          <NuxtLink
-            v-if="createdBookingId"
-            :to="`/profile/bookings/${createdBookingId}`"
-            class="btn btn-primary"
-          >
-            Посмотреть бронь
-          </NuxtLink>
-          <NuxtLink to="/profile/bookings" class="btn btn-ghost">
-            Мои брони
-          </NuxtLink>
-        </div>
+  <div class="min-h-screen bg-[#fbf9f8] text-text-primary font-body flex flex-col">
+    <main class="flex-1 bg-[#fbf9f8] pb-32 lg:pb-0">
+      <div v-if="isOfferLoading" class="flex justify-center py-20">
+        <span class="w-10 h-10 rounded-full border-2 border-primary-container border-t-transparent animate-spin" />
       </div>
 
-      <!-- Booking form -->
-      <template v-else>
-        <h1 class="text-2xl font-bold mb-2">Забронировать</h1>
-        <p class="text-base-content/60 mb-6">{{ offer.title }}</p>
+      <div v-else-if="offerError" class="max-w-md mx-auto mt-space-2xl p-space-lg rounded-2xl bg-status-error-bg text-status-error font-body-sm">
+        {{ offerError }}
+      </div>
 
-        <div class="flex lg:flex-row flex-col gap-6 pt-2">
-          <!-- Offer preview -->
-          <div class="flex-shrink-0 w-full lg:w-64">
-            <div class="rounded-2xl overflow-hidden border border-base-200 bg-base-100 shadow-sm">
-              <div class="h-40 bg-base-200">
-                <img
-                  v-if="coverImage"
-                  :src="coverImage"
-                  :alt="offer.title"
-                  class="w-full h-full object-cover"
-                />
-                <div v-else class="w-full h-full flex items-center justify-center text-base-content/20">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                  </svg>
-                </div>
-              </div>
-              <div class="p-4">
-                <p class="font-semibold text-sm">{{ offer.title }}</p>
-                <p v-if="offer.branchAddress" class="text-xs text-base-content/50 mt-1">
-                  {{ offer.branchAddress }}
-                </p>
-                <div v-if="offer.autoConfirmBooking" class="mt-3 flex items-center gap-1.5 text-xs text-success">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                  </svg>
-                  Автоподтверждение
-                </div>
-              </div>
-            </div>
+      <template v-else-if="offer">
+        <div v-if="offer.autoConfirmBooking" class="w-full bg-surface-soft-pink py-space-xs px-margin-mobile md:px-margin border-b border-border-default">
+          <div class="max-w-[1120px] mx-auto flex items-center gap-space-xs font-label-sm text-text-secondary">
+            <span class="material-symbols-outlined text-primary-pressed text-[18px]">bolt</span>
+            Мгновенное подтверждение слота без звонка оператору
+          </div>
+        </div>
 
-            <!-- Work schedule -->
-            <div v-if="offer.workSchedule?.length" class="mt-4 bg-base-100 rounded-2xl border border-base-200 p-4">
-              <p class="text-sm font-semibold mb-3">График работы</p>
-              <ul class="space-y-1.5">
-                <li
-                  v-for="day in offer.workSchedule"
-                  :key="day.day"
-                  class="flex items-center justify-between text-xs"
-                  :class="day.isClosed ? 'text-base-content/30' : 'text-base-content/70'"
+        <div class="max-w-[1120px] w-full mx-auto px-margin-mobile md:px-margin py-space-lg md:py-space-xl">
+          <div class="hidden md:block w-full mb-space-2xl">
+            <div class="relative flex items-center justify-between max-w-[820px] mx-auto">
+              <div class="absolute left-6 right-6 top-5 h-[2px] bg-border-default" />
+              <div
+                class="absolute left-6 top-5 h-[2px] bg-primary-container transition-all"
+                :style="{ width: `${Math.min(100, (stepIndex - 1) * 33)}%` }"
+              />
+              <div
+                v-for="(label, index) in ['1. Дата и время', '2. Детали брони', '3. Ваши контакты', '4. Подтверждение']"
+                :key="label"
+                class="relative z-10 flex flex-col items-center gap-space-xs"
+              >
+                <div
+                  class="w-10 h-10 rounded-full flex items-center justify-center font-label-md"
+                  :class="stepIndex > index + 1
+                    ? 'bg-primary-container text-text-primary'
+                    : stepIndex === index + 1
+                      ? 'bg-text-primary text-on-primary ring-4 ring-primary-container/40'
+                      : 'bg-surface-container text-text-secondary'"
                 >
-                  <span>{{ ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][day.day] }}</span>
-                  <span>{{ day.isClosed ? 'Выходной' : `${day.openTime} – ${day.closeTime}` }}</span>
-                </li>
-              </ul>
+                  <span v-if="stepIndex > index + 1" class="material-symbols-outlined text-[20px]">check</span>
+                  <span v-else>{{ index + 1 }}</span>
+                </div>
+                <span class="font-label-sm" :class="stepIndex >= index + 1 ? 'text-text-primary' : 'text-text-secondary'">{{ label }}</span>
+              </div>
             </div>
           </div>
 
-          <!-- Form -->
-          <form
-            class="flex flex-col gap-3 lg:gap-4 w-full md:w-2/3 lg:w-1/2 px-4 py-8 shadow-xl bg-base-100 border-gray-300 border rounded-2xl"
-            @submit.prevent="handleSubmit"
-          >
-            <!-- Date -->
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">Дата</label>
-              <VueDatePicker
-                v-model="date"
-                placeholder="Выберите дату"
-                locale="ru-Ru"
-                cancel-text="Закрыть"
-                select-text="Выбрать"
-                :format="'dd.MM.yyyy'"
-                :preview-format="'dd.MM.yyyy'"
-                :enable-time-picker="false"
-                input-class-name="h-12"
-                :disable-year-select="false"
-                :min-date="new Date()"
-                :disabled-week-days="disabledWeekDays"
-              />
+          <div class="md:hidden flex flex-col gap-space-sm mb-space-md">
+            <div class="flex items-center justify-between">
+              <span class="font-label-md">Шаг {{ Math.min(stepIndex, 3) }} из 3</span>
+              <span class="font-label-sm text-text-secondary bg-surface-secondary px-2.5 py-1 rounded-full">Бронь за 1 мин</span>
             </div>
-
-            <!-- Time -->
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">
-                Время
-                <span v-if="timeHint" class="text-xs text-base-content/50 ml-1 font-normal">
-                  ({{ timeHint }})
-                </span>
-              </label>
-              <VueDatePicker
-                v-model="time"
-                placeholder="Выберите время"
-                time-picker
-                locale="ru-Ru"
-                :format="'HH:mm'"
-                cancel-text="Закрыть"
-                select-text="Выбрать"
-              />
+            <div class="grid grid-cols-4 gap-1.5">
+              <div v-for="index in 4" :key="index" class="h-1.5 rounded-full" :class="stepIndex >= index ? 'bg-primary-container' : 'bg-surface-container-high'" />
             </div>
-
-            <!-- Persons count -->
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">Количество персон</label>
-              <input
-                v-model.number="personsCount"
-                type="number"
-                min="1"
-                max="100"
-                class="input input-bordered"
-                :class="lg ? 'input-lg' : ''"
-                placeholder="1"
-                required
-              />
-            </div>
-
-            <!-- Phone -->
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">Номер для связи</label>
-              <input
-                v-model="phone"
-                type="tel"
-                class="input input-bordered"
-                :class="lg ? 'input-lg' : ''"
-                placeholder="+7 999 123-45-67"
-                required
-              />
-            </div>
-
-            <!-- Payment method -->
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">Способ оплаты</label>
-              <select
-                v-model="paymentMethod"
-                class="select select-bordered"
-                :class="lg ? 'select-lg' : ''"
+            <div class="flex items-center gap-space-sm p-space-sm rounded-xl bg-surface-secondary">
+              <img :src="coverImage" :alt="offer.title" class="w-14 h-14 rounded-lg object-cover">
+              <div class="min-w-0 flex-1">
+                <p class="font-headline-sm text-[16px] truncate">{{ offer.title }}</p>
+                <p class="font-body-sm text-text-secondary truncate">{{ offer.branchAddress || 'Ташкент' }}</p>
+              </div>
+              <span
+                class="font-label-sm px-2 py-1 rounded-full"
+                :class="isOpen ? 'bg-status-success-bg text-status-success' : 'bg-status-error-bg text-status-error'"
               >
-                <option
-                  v-for="opt in paymentOptions"
-                  :key="opt.value"
-                  :value="opt.value"
+                {{ isOpen ? 'Открыто' : 'Закрыто' }}
+              </span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-space-xl items-start">
+            <div class="lg:col-span-8 flex flex-col gap-space-lg md:gap-space-2xl">
+              <section class="bg-surface-page rounded-2xl p-space-md md:p-space-lg shadow-sm border border-border-default">
+                <div class="flex items-center justify-between mb-space-md">
+                  <div class="flex items-center gap-space-sm">
+                    <span class="hidden md:flex w-8 h-8 rounded-xl bg-surface-soft-pink text-primary-pressed items-center justify-center">
+                      <span class="material-symbols-outlined text-[20px]">calendar_month</span>
+                    </span>
+                    <div>
+                      <h2 class="font-headline-sm">1. Дата и время игры</h2>
+                      <p class="hidden md:block font-body-sm text-text-secondary">Выберите день и свободный слот</p>
+                    </div>
+                  </div>
+                  <span class="font-label-sm text-primary-pressed capitalize">{{ monthLabel }}</span>
+                </div>
+
+                <div class="flex items-center gap-space-sm overflow-x-auto pb-space-xs">
+                  <button
+                    v-for="chip in dateChips"
+                    :key="chip.date.toISOString()"
+                    class="shrink-0 flex flex-col items-center justify-center min-w-[76px] md:min-w-[100px] py-2.5 px-2 rounded-xl"
+                    :class="chip.closed
+                      ? 'bg-surface-container text-text-muted cursor-not-allowed'
+                      : chip.date.toDateString() === selectedDate.toDateString()
+                        ? 'bg-primary-container text-text-primary font-bold'
+                        : 'bg-surface-secondary text-text-secondary'"
+                    type="button"
+                    :disabled="chip.closed"
+                    @click="pickDate(chip.date, chip.closed)"
+                  >
+                    <span class="font-label-sm">{{ chip.weekday }}</span>
+                    <span class="font-label-lg md:text-label-lg">{{ chip.day }} {{ chip.month }}</span>
+                  </button>
+                </div>
+
+                <div class="mt-space-lg">
+                  <div class="flex items-center justify-between mb-space-sm">
+                    <span class="font-label-md">Свободные слоты</span>
+                    <span class="font-body-sm text-text-muted">Ташкент, UTC+5</span>
+                  </div>
+                  <div v-if="slots.length" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                    <button
+                      v-for="slot in slots"
+                      :key="slot"
+                      class="h-12 rounded-xl font-label-md flex items-center justify-center gap-1"
+                      :class="selectedTime === slot ? 'bg-primary-container font-bold' : 'bg-surface-secondary'"
+                      type="button"
+                      @click="selectedTime = slot"
+                    >
+                      <span v-if="selectedTime === slot" class="material-symbols-outlined text-[16px]">check</span>
+                      {{ slot }}
+                    </button>
+                  </div>
+                  <p v-else class="font-body-sm text-text-muted">В этот день слотов нет</p>
+                </div>
+              </section>
+
+              <section class="bg-surface-page rounded-2xl p-space-md md:p-space-lg shadow-sm border border-border-default">
+                <div class="flex items-center gap-space-sm mb-space-lg">
+                  <span class="hidden md:flex w-8 h-8 rounded-xl bg-surface-soft-pink text-primary-pressed items-center justify-center">
+                    <span class="material-symbols-outlined text-[20px]">groups</span>
+                  </span>
+                  <div>
+                    <h2 class="font-headline-sm">2. Детали бронирования</h2>
+                    <p class="hidden md:block font-body-sm text-text-secondary">Количество гостей и пожелания к визиту</p>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+                  <div class="p-space-md rounded-xl bg-surface-secondary flex items-center justify-between">
+                    <div>
+                      <p class="font-label-md">Гости</p>
+                      <p class="font-body-sm text-text-secondary">{{ personsLabel }}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <button class="w-9 h-9 rounded-full bg-surface-page" type="button" @click="personsCount = Math.max(1, personsCount - 1)">−</button>
+                      <span class="font-headline-sm w-6 text-center">{{ personsCount }}</span>
+                      <button class="w-9 h-9 rounded-full bg-surface-page" type="button" @click="personsCount = Math.min(12, personsCount + 1)">+</button>
+                    </div>
+                  </div>
+                  <div class="p-space-md rounded-xl bg-surface-secondary">
+                    <p class="font-label-sm text-text-secondary">Длительность</p>
+                    <p class="font-headline-sm mt-1">1 час</p>
+                    <p class="font-body-sm text-text-muted mt-1">
+                      {{ selectedTime ? `${selectedTime} — ${endTime}` : 'Выберите слот' }}
+                    </p>
+                  </div>
+                </div>
+
+                <div class="mt-space-md flex flex-col gap-space-sm">
+                  <label class="flex items-center gap-space-sm p-space-sm rounded-xl bg-surface-secondary cursor-pointer">
+                    <input v-model="needShoes" type="checkbox" class="w-5 h-5 accent-primary-pressed">
+                    <div class="flex-1">
+                      <p class="font-label-md">Прокатная обувь</p>
+                      <p class="font-body-sm text-status-success">Бесплатно, если есть на площадке</p>
+                    </div>
+                  </label>
+                  <label class="flex items-center gap-space-sm p-space-sm rounded-xl bg-surface-secondary cursor-pointer">
+                    <input v-model="needBumpers" type="checkbox" class="w-5 h-5 accent-primary-pressed">
+                    <div class="flex-1">
+                      <p class="font-label-md">Детские бортики / доп. опции</p>
+                      <p class="font-body-sm text-text-secondary">Передадим в комментарии к брони</p>
+                    </div>
+                  </label>
+                </div>
+              </section>
+
+              <section class="bg-surface-page rounded-2xl p-space-md md:p-space-lg shadow-sm border border-border-default">
+                <div class="flex items-center gap-space-sm mb-space-lg">
+                  <span class="hidden md:flex w-8 h-8 rounded-xl bg-surface-soft-pink text-primary-pressed items-center justify-center">
+                    <span class="material-symbols-outlined text-[20px]">badge</span>
+                  </span>
+                  <div>
+                    <h2 class="font-headline-sm">3. Ваши контактные данные</h2>
+                    <p class="hidden md:block font-body-sm text-text-secondary">На этот номер придёт подтверждение брони</p>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+                  <label class="flex flex-col gap-1.5">
+                    <span class="font-label-sm">Имя и фамилия</span>
+                    <input
+                      v-model="guestName"
+                      class="h-12 px-space-md rounded-xl bg-surface-secondary border border-border-default font-body-md"
+                      type="text"
+                      placeholder="Ваше имя"
+                    >
+                  </label>
+                  <label class="flex flex-col gap-1.5">
+                    <span class="font-label-sm">Номер телефона</span>
+                    <input
+                      v-model="phone"
+                      class="h-12 px-space-md rounded-xl bg-surface-secondary border border-border-default font-body-md"
+                      type="tel"
+                      placeholder="+998"
+                      required
+                    >
+                  </label>
+                </div>
+                <label class="flex flex-col gap-1.5 mt-space-md">
+                  <span class="font-label-sm">Пожелания <span class="text-text-muted font-normal">(необязательно)</span></span>
+                  <textarea
+                    v-model="comment"
+                    class="p-space-md rounded-xl bg-surface-secondary border border-border-default font-body-md resize-none"
+                    rows="2"
+                    placeholder="Например: удобное расположение, день рождения"
+                  />
+                </label>
+                <div class="flex flex-col gap-1.5 mt-space-md">
+                  <span class="font-label-sm">Оплата</span>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button
+                      class="h-11 rounded-xl font-label-md"
+                      :class="paymentMethod === 'cash' ? 'bg-primary-container' : 'bg-surface-secondary'"
+                      type="button"
+                      @click="paymentMethod = 'cash'"
+                    >
+                      На месте
+                    </button>
+                    <button
+                      class="h-11 rounded-xl font-label-md"
+                      :class="paymentMethod === 'card' ? 'bg-primary-container' : 'bg-surface-secondary'"
+                      type="button"
+                      @click="paymentMethod = 'card'"
+                    >
+                      Карта
+                    </button>
+                  </div>
+                </div>
+
+                <div class="mt-space-lg p-space-md rounded-xl bg-status-success-bg flex items-start gap-space-sm">
+                  <span class="material-symbols-outlined text-status-success">check_circle</span>
+                  <p class="font-body-sm">
+                    <span class="font-semibold">Бесплатная отмена по правилам площадки.</span>
+                    {{ offer.autoConfirmBooking ? 'Слот подтверждается сразу.' : 'Площадка подтвердит заявку после отправки.' }}
+                  </p>
+                </div>
+              </section>
+            </div>
+
+            <aside class="hidden lg:block lg:col-span-4 sticky top-24">
+              <div class="bg-surface-page rounded-2xl p-space-lg shadow-sm border border-border-default flex flex-col gap-space-md">
+                <div class="flex gap-space-sm items-start">
+                  <img :src="coverImage" :alt="offer.title" class="w-20 h-20 rounded-xl object-cover">
+                  <div>
+                    <span v-if="categoryLabel" class="font-label-sm text-primary-pressed uppercase tracking-wider">{{ categoryLabel }}</span>
+                    <h3 class="font-headline-sm leading-snug">{{ offer.title }}</h3>
+                    <p v-if="offer.branchAddress" class="font-body-sm text-text-secondary mt-0.5 inline-flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[16px] text-text-muted">location_on</span>
+                      {{ offer.branchAddress }}
+                    </p>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between py-space-xs px-space-sm rounded-lg bg-surface-secondary font-label-sm">
+                  <span v-if="offer.rating" class="inline-flex items-center gap-1 font-bold">
+                    <span class="material-symbols-outlined filled text-status-warning text-[18px]">star</span>
+                    {{ offer.rating.toFixed(1) }}
+                    <span class="text-text-muted font-normal">({{ offer.reviewCount || 0 }})</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 text-status-success">
+                    <span class="material-symbols-outlined text-[16px]">verified</span>
+                    Проверено LocaFun
+                  </span>
+                </div>
+                <div class="h-px bg-border-default" />
+                <div class="space-y-space-xs font-body-sm">
+                  <div class="flex justify-between text-text-secondary">
+                    <span>Дата</span>
+                    <span class="font-semibold text-text-primary capitalize">{{ dateShort }}</span>
+                  </div>
+                  <div class="flex justify-between text-text-secondary">
+                    <span>Время сеанса</span>
+                    <span class="font-semibold text-text-primary">{{ selectedTime ? `${selectedTime} — ${endTime}` : '—' }}</span>
+                  </div>
+                  <div class="flex justify-between text-text-secondary">
+                    <span>Гости</span>
+                    <span class="font-semibold text-text-primary">{{ personsLabel }}</span>
+                  </div>
+                  <div class="flex justify-between text-text-secondary">
+                    <span>Сервисный сбор</span>
+                    <span class="text-status-success font-semibold">0 сум</span>
+                  </div>
+                </div>
+                <div class="h-px bg-border-default" />
+                <div class="flex justify-between items-baseline">
+                  <span class="font-headline-sm">К оплате</span>
+                  <span class="font-headline-md font-extrabold">{{ formatPrice(unitPrice) || 'по запросу' }}</span>
+                </div>
+                <p v-if="submitError" class="font-body-sm text-status-error">{{ submitError }}</p>
+                <button
+                  class="w-full h-12 rounded-xl bg-primary-container hover:bg-primary-hover text-text-primary font-label-lg flex items-center justify-center gap-2"
+                  type="button"
+                  :disabled="isSubmitting"
+                  @click="handleSubmit"
                 >
-                  {{ opt.name }}
-                </option>
-              </select>
-            </div>
+                  {{ isSubmitting ? 'Отправка…' : 'Подтвердить бронирование' }}
+                  <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+                </button>
+                <p class="text-center font-body-sm text-text-secondary">
+                  Оплата {{ paymentMethod === 'card' ? 'картой' : 'на месте' }}
+                </p>
+                <div class="p-space-sm rounded-xl bg-surface-soft-pink flex items-start gap-space-xs">
+                  <span class="material-symbols-outlined text-primary-pressed text-[20px]">verified_user</span>
+                  <p class="font-label-sm leading-tight">
+                    <span class="font-bold">Гарантия брони LocaFun:</span> слот закрепляется после подтверждения.
+                  </p>
+                </div>
+              </div>
+            </aside>
+          </div>
 
-            <!-- Comment -->
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">Пожелания (необязательно)</label>
-              <textarea
-                v-model="comment"
-                class="textarea textarea-bordered resize-none"
-                :class="lg ? 'textarea-lg' : ''"
-                placeholder="Стол у окна, без орехов..."
-                rows="2"
-              />
-            </div>
-
-            <div v-if="submitError" class="alert alert-error text-sm py-2">{{ submitError }}</div>
-
-            <button
-              type="submit"
-              class="btn btn-primary mt-2"
-              :class="lg ? 'btn-lg' : ''"
-              :disabled="isSubmitting"
-            >
-              <span v-if="isSubmitting" class="loading loading-spinner loading-sm" />
-              Забронировать
+          <div class="lg:hidden mt-space-md">
+            <button class="font-label-md text-primary-pressed inline-flex items-center gap-1" type="button" @click="showBreakdown = !showBreakdown">
+              <span class="material-symbols-outlined text-[18px]">receipt_long</span>
+              Смотреть детали заказа
             </button>
-
-            <p v-if="!logged" class="text-xs text-base-content/50 text-center mt-1">
-              Для бронирования необходимо
-              <NuxtLink to="/auth/login" class="link link-primary">войти в аккаунт</NuxtLink>
-            </p>
-          </form>
+            <div v-if="showBreakdown" class="mt-2 p-3.5 rounded-xl bg-surface-secondary font-body-sm space-y-2">
+              <div class="flex justify-between"><span>Дата</span><span>{{ dateShort }}</span></div>
+              <div class="flex justify-between"><span>Слот</span><span>{{ selectedTime || '—' }}</span></div>
+              <div class="flex justify-between"><span>Гости</span><span>{{ personsLabel }}</span></div>
+              <div class="flex justify-between"><span>Тариф</span><span>{{ formatPrice(unitPrice) || 'по запросу' }}</span></div>
+            </div>
+            <p v-if="submitError" class="font-body-sm text-status-error mt-2">{{ submitError }}</p>
+          </div>
         </div>
       </template>
-    </template>
+    </main>
+
+    <div v-if="offer && !submitSuccess" class="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface-page shadow-[0_-4px_20px_rgba(23,23,23,0.06)] px-margin-mobile py-3 pb-safe">
+      <div class="flex items-center justify-between gap-space-sm">
+        <div>
+          <p class="font-label-sm text-[11px] text-text-secondary uppercase">Итого к оплате</p>
+          <p class="font-headline-sm">{{ formatPrice(unitPrice) || 'по запросу' }}</p>
+        </div>
+        <button
+          class="shrink-0 h-12 px-5 rounded-xl bg-primary-container text-text-primary font-label-lg inline-flex items-center gap-1"
+          type="button"
+          :disabled="isSubmitting"
+          @click="handleSubmit"
+        >
+          Забронировать
+          <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+        </button>
+      </div>
+    </div>
+
+    <div
+      v-if="submitSuccess"
+      class="fixed inset-0 z-50 flex items-center justify-center p-space-md bg-text-primary/60 backdrop-blur-sm"
+    >
+      <div class="bg-surface-page rounded-2xl max-w-lg w-full p-space-xl border border-border-default">
+        <div class="w-16 h-16 rounded-full bg-status-success-bg text-status-success flex items-center justify-center mx-auto mb-space-md">
+          <span class="material-symbols-outlined text-[36px]">check_circle</span>
+        </div>
+        <div class="text-center mb-space-lg">
+          <span class="font-label-sm bg-primary-container/50 px-3 py-1 rounded-full font-bold">
+            Бронь {{ createdBookingId ? `#${createdBookingId.slice(0, 8)}` : 'создана' }}
+          </span>
+          <h3 class="font-headline-md mt-space-sm">Бронирование подтверждено</h3>
+          <p class="font-body-md text-text-secondary mt-1">
+            {{ offer?.autoConfirmBooking ? 'Слот подтверждён автоматически.' : 'Заявка отправлена площадке.' }}
+          </p>
+        </div>
+        <div class="bg-surface-secondary rounded-xl p-space-md space-y-space-xs mb-space-lg font-body-sm">
+          <div class="flex justify-between"><span class="text-text-secondary">Локация</span><span class="font-semibold">{{ offer?.title }}</span></div>
+          <div class="flex justify-between"><span class="text-text-secondary">Время</span><span class="font-semibold capitalize">{{ dateLong }}, {{ selectedTime }}</span></div>
+          <div class="flex justify-between"><span class="text-text-secondary">Гости</span><span class="font-semibold">{{ personsLabel }}</span></div>
+        </div>
+        <div class="flex flex-col gap-space-sm">
+          <NuxtLink
+            v-if="createdBookingId"
+            :to="`/profile/bookings/${createdBookingId}`"
+            class="w-full h-12 rounded-xl bg-primary-container font-label-lg flex items-center justify-center gap-2"
+          >
+            <span class="material-symbols-outlined">confirmation_number</span>
+            Показать бронь
+          </NuxtLink>
+          <div class="grid grid-cols-2 gap-space-sm">
+            <NuxtLink to="/profile/bookings" class="h-11 rounded-xl bg-surface-secondary font-label-md flex items-center justify-center">
+              Мои брони
+            </NuxtLink>
+            <NuxtLink :to="offerBackHref" class="h-11 rounded-xl border border-border-default font-label-md flex items-center justify-center">
+              К предложению
+            </NuxtLink>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
-
-<style scoped>
-.dp__main :deep(.dp__theme_light) {
-  --dp-highlight-color: rgba(34, 233, 8, 0.993);
-  --dp-primary-color: var(--color-primary);
-  --dp-primary-text-color: var(--color-primary-content);
-}
-
-@media (max-width: 1023px) {
-  :deep(.dp__input) {
-    padding: 7.5px 40px !important;
-  }
-}
-@media (min-width: 1024px) {
-  :deep(.dp__input) {
-    padding: 11.5px 40px !important;
-  }
-}
-</style>

@@ -1,3 +1,5 @@
+@import "./tokens.css";
+
 /* Tailwind/DaisyUI can override NuxtLoadingIndicator inline opacity */
 .nuxt-loading-indicator {
   opacity: unset !important;

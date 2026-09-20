@@ -15,7 +15,7 @@ export default defineNuxtConfig({
           content:
             'Платформа LocaFun поможет найти бассейны, рестораны, компьютерные клубы, боулинги и другие развлечения рядом с вами. Открой для себя активный отдых в своём городе!',
         },
-        { name: 'theme-color', content: '#0F766E' },
+        { name: 'theme-color', content: '#FFA8C5' },
         { name: 'format-detection', content: 'telephone=no' },
         { property: 'og:type', content: 'website' },
         { property: 'og:site_name', content: 'LocaFun' },
@@ -32,6 +32,16 @@ export default defineNuxtConfig({
       link: [
         { rel: 'icon', href: '/favicon.ico', sizes: 'any' },
         { rel: 'apple-touch-icon', href: '/favicon.ico' },
+        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: 'anonymous' },
+        {
+          rel: 'stylesheet',
+          href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap',
+        },
+        {
+          rel: 'stylesheet',
+          href: 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap',
+        },
       ],
     },
   },
